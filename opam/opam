@@ -1,0 +1,20 @@
+opam-version: "1.2"
+name: "epidisco"
+version: "0.0.0+master"
+maintainer: "seb@mondet.org"
+authors: [ "Sebastien Mondet <seb@mondet.org>" ]
+license: "Apache-2.0"
+build: [
+  ["omake"]
+  ["omake" "install" "BINDIR=%{bin}%"]
+]
+remove: [
+  ["omake" "uninstall" "BINDIR=%{bin}%"]
+]
+depends: [
+  "base-threads"
+  "ketrew" {>= "2.0.0"}
+  "biokepi"
+  "omake"
+  "ocamlfind"
+]

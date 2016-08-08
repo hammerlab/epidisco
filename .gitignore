@@ -1,0 +1,5 @@
+.merlin
+.omakedb
+.omakedb.lock
+OMakeroot.omc
+_build/

@@ -1,0 +1,54 @@
+open build/OCaml
+open tools/OMakeLibrary.om
+DefineCommandVars()
+
+.PHONY: build-all doc install uninstall
+
+
+################################################################################
+# General Project Information
+PROJECT = epidisco
+VERSION = 0.0.0+master
+DESCRIPTION = Epitope Discovery Pipeline
+
+if $(test -e .git)
+    # this one works with quotes not the `None` one
+    GIT_COMMIT = 'Some "$(shell git rev-parse HEAD)"'
+    export
+else
+    GIT_COMMIT = None
+    export
+
+LIB_PACKAGES = biokepi ppx_deriving.std
+
+OCAMLFLAGS = -bin-annot -absname -thread -short-paths -g \
+             -keep-docs -keep-locs \
+             -strict-formats -strict-sequence -w +9 -safe-string
+
+section # library
+    OCAMLPACKS[] = $(LIB_PACKAGES)
+    _build/src/lib/metadata.ml: :value: $(VERSION)
+        echo "(** Metadata generated at compile-time *)" > $@
+        echo "let version = lazy \"$(VERSION)\"" >> $@
+        echo "let git_commit = $(GIT_COMMIT)" >> $@
+    OCAML_GENERATED_MODULES[] = metadata
+    .DEFAULT: $(OCamlPackedLibraryOfDir epidisco, src/lib)
+
+
+DotMerlin(./src, $(LIB_PACKAGES))
+
+install: install-lib-epidisco
+uninstall: uninstall-lib-epidisco
+
+# `omake build-all` to build also the tests:
+build-all: lib-epidisco
+#.PHONY: doc
+
+#DOC_PACKAGES[] = $(LIB_PACKAGES)
+#doc:
+#    ./tools/build-doc.sh $(concat \,, $(LIB_PACKAGES))
+
+
+DIRS[] = src/lib/
+LIBS[] = epidisco
+DotOCamlinit($(DIRS), $(LIB_PACKAGES), $(LIBS))

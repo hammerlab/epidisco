@@ -144,12 +144,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
-  let align ~reference_build ~aligner (fastqs : [`Fastq] list Bfx.repr) =
-    Bfx.list_map fastqs
-      ~f:(Bfx.lambda (fun fq -> aligner ~reference_build fq))
-
-  let to_bam ~reference_build fq =
-    align ~reference_build fq ~aligner:(Bfx.bwa_mem ?configuration:None)
+  let to_bam ~reference_build input =
+    let list_of_inputs = Stdlib.bwa_mem_opt_inputs input in
+    List.map list_of_inputs ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
+    |> Bfx.list
     |> Bfx.merge_bams
     |> Bfx.picard_mark_duplicates
       ~configuration:mark_dups_config
@@ -184,7 +182,9 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     Bfx.concat fqs |> Bfx.fastqc
 
   let rna_bam ~reference_build fqs =
-    align ~reference_build fqs ~aligner:(Bfx.star ~configuration:star_config)
+    Bfx.list_map fqs
+      ~f:(Bfx.lambda (fun fq ->
+          Bfx.star ~configuration:star_config ~reference_build fq))
     |> Bfx.merge_bams
     |> Bfx.picard_mark_duplicates
       ~configuration:mark_dups_config
@@ -216,13 +216,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let run parameters =
     let open Parameters in
-    let normal = Stdlib.fastq_of_input parameters.normal in
-    let tumor = Stdlib.fastq_of_input parameters.tumor in
     let rna = Option.map parameters.rna ~f:Stdlib.fastq_of_input in
     let normal_bam, tumor_bam =
       final_bams
-        ~normal:(normal |> to_bam ~reference_build:parameters.reference_build)
-        ~tumor:(tumor |> to_bam ~reference_build:parameters.reference_build)
+        ~normal:(parameters.normal |> to_bam ~reference_build:parameters.reference_build)
+        ~tumor:(parameters.tumor |> to_bam ~reference_build:parameters.reference_build)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
     in
     let normal_bam_flagstat, tumor_bam_flagstat =
@@ -277,6 +275,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           (Bfx.mhc_alleles (`Names alleles))
         |> Bfx.save "Vaxrank"
       ) in
+    let normal = Stdlib.fastq_of_input parameters.normal in
+    let tumor = Stdlib.fastq_of_input parameters.tumor in
     Bfx.observe (fun () ->
         Bfx.report
           (Parameters.construct_run_name parameters)

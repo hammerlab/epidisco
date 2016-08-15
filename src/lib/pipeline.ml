@@ -169,15 +169,19 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ~with_somaticsniper
       ~reference_build ~normal ~tumor =
     [
-      "strelka", Bfx.strelka () ~normal ~tumor ~configuration:strelka_config;
-      "mutect", Bfx.mutect () ~normal ~tumor ~configuration:mutect_config;
-      "haplo-normal", Bfx.gatk_haplotype_caller normal;
-      "haplo-tumor", Bfx.gatk_haplotype_caller tumor;
+      "strelka", true, Bfx.strelka () ~normal ~tumor ~configuration:strelka_config;
+      "mutect", true, Bfx.mutect () ~normal ~tumor ~configuration:mutect_config;
+      "haplo-normal", false, Bfx.gatk_haplotype_caller normal;
+      "haplo-tumor", false, Bfx.gatk_haplotype_caller tumor;
     ]
-    @ (if with_mutect2 then ["mutect2", Bfx.mutect2 ~normal ~tumor ()] else [])
-    @ (if with_varscan then ["varscan", Bfx.varscan_somatic ~normal ~tumor ()] else [])
+    @ (if with_mutect2
+       then ["mutect2", true, Bfx.mutect2 ~normal ~tumor ()]
+       else [])
+    @ (if with_varscan
+       then ["varscan", true, Bfx.varscan_somatic ~normal ~tumor ()]
+       else [])
     @ (if with_somaticsniper
-       then ["somatic-sniper", Bfx.somaticsniper ~normal ~tumor ()]
+       then ["somatic-sniper", true, Bfx.somaticsniper ~normal ~tumor ()]
        else [])
 
   let qc fqs =
@@ -194,17 +198,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let hla fqs =
     Bfx.seq2hla (Bfx.concat fqs)
 
-    let rna_pipeline ~reference_build ~somatic_vcf fqs =
+    let rna_pipeline ~reference_build fqs =
     let bam = rna_bam ~reference_build fqs in
-    let isovared =
-      Bfx.isovar
-        reference_build
-        somatic_vcf
-        bam in
     (
       Some (bam |> Bfx.save "rna-bam"),
       Some (bam |> Bfx.stringtie |> Bfx.save "stringtie"),
-      Some (isovared |> Bfx.save "isovar"),
       (* Seq2HLA does not work on mice: *)
       (match reference_build with
       | "mm10" -> None
@@ -235,20 +233,22 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         ~with_somaticsniper
         ~reference_build:parameters.reference_build
         ~normal:normal_bam ~tumor:tumor_bam in
-    let somatic_vcf = List.hd_exn vcfs |> snd in
-    let rna_bam, stringtie, isovar, seq2hla, rna_bam_flagstat =
+    let somatic_vcfs =
+      List.filter ~f:(fun (_, somatic, _) -> somatic) vcfs
+      |> List.map ~f:(fun (_, _, v) -> v) in
+    let rna_bam, stringtie, seq2hla, rna_bam_flagstat =
       match rna with
-      | None -> None, None, None, None, None
+      | None -> None, None, None, None
       | Some r ->
-        rna_pipeline r ~reference_build:parameters.reference_build ~somatic_vcf
+        rna_pipeline r ~reference_build:parameters.reference_build
     in
     let maybe_annotated =
       match parameters.reference_build with
       | "b37" | "hg19" ->
-        List.map vcfs ~f:(fun (k, vcf) ->
+        List.map vcfs ~f:(fun (k, somatic, vcf) ->
             Bfx.vcf_annotate_polyphen parameters.reference_build vcf
             |> fun a -> (k, Bfx.save ("VCF-annotated-" ^ k) a))
-      | _ -> vcfs
+      | _ -> List.map vcfs ~f:(fun (name, somatic, v) -> name, v)
     in
     let seq2hla = if not parameters.with_seq2hla then None else seq2hla in
     let mhc_alleles =
@@ -259,20 +259,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | None, None -> None
       end
     in
-    let topiary =
-      let open Option in
-      if parameters.with_topiary
-      then
-        mhc_alleles >>=
-        fun alleles ->
-        Bfx.topiary
-          parameters.reference_build
-          somatic_vcf
-          `Random
-          alleles
-        |> Bfx.save "Topiary"
-        |> return
-      else None in
     let vaxrank =
       let open Option in
       rna_bam
@@ -282,7 +268,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       return (
         Bfx.vaxrank
           parameters.reference_build
-          (List.map ~f:snd vcfs)
+          somatic_vcfs
           bam
           `Random
           alleles
@@ -296,7 +282,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           ~qc_tumor:(qc tumor |> Bfx.save "QC:tumor")
           ~normal_bam ~tumor_bam ?rna_bam
           ~normal_bam_flagstat ~tumor_bam_flagstat
-          ?vaxrank ?topiary ?isovar ?seq2hla ?stringtie ?rna_bam_flagstat
+          ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
           ~metadata:(Parameters.metadata parameters)
       )
 end

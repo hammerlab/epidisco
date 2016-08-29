@@ -133,12 +133,23 @@ let pipeline_term
             value & flag & info [sprintf "with-%s" name]
               ~doc:(sprintf "Also run `%s`" name)
           ) in
+      let bed_file_opt =
+        Term.(pure (fun e -> `Bedfile e)
+              $ Arg.(
+                  let doc =
+                    "Run bedtools intersect on VCFs with the given bed file. \
+                     file://... or http(s)://..." in
+                  value
+                  & opt (some string) None
+                  & info ["filter-vcfs-to-region-with"] ~doc))
+      in
       pure begin fun
         (`Dry_run dry_run)
         (`With_seq2hla with_seq2hla)
         (`With_mutect2 with_mutect2)
         (`With_varscan with_varscan)
         (`With_somaticsniper with_somaticsniper)
+        (`Bedfile bedfile)
         (`Normal_json normal_json_file)
         (`Tumor_json tumor_json_file)
         (`Rna_json rna_json_file)
@@ -160,6 +171,7 @@ let pipeline_term
           in
           let params =
             Pipeline.Parameters.make experiment_name
+              ~bedfile
               ~reference_build ~normal ~tumor ?rna
               ?mhc_alleles
               ~with_seq2hla
@@ -181,6 +193,7 @@ let pipeline_term
       $ tool_option (fun e -> `With_mutect2 e) "mutect2"
       $ tool_option (fun e -> `With_varscan e) "varscan"
       $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
+      $ bed_file_opt
       $ json_file_arg "normal" (fun s -> `Normal_json s)
       $ json_file_arg "tumor" (fun s -> `Tumor_json s)
       $ json_file_arg ~req:false "rna" (fun s -> `Rna_json s)

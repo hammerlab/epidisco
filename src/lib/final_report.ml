@@ -39,6 +39,7 @@ module type Semantics = sig
     ?isovar : [ `Isovar ] repr ->
     ?seq2hla: [ `Seq2hla_result ] repr ->
     ?stringtie: [ `Gtf ] repr ->
+    ?bedfile: string ->
     metadata: (string * string) list ->
     string ->
     unit repr
@@ -63,6 +64,7 @@ module To_json = struct
       ?isovar
       ?seq2hla
       ?stringtie
+      ?bedfile
       ~metadata
       run_name =
     fun ~var_count ->
@@ -89,6 +91,9 @@ module To_json = struct
         @ opt "isovar" isovar
         @ opt "seq2hla" isovar
         @ opt "stringtie" stringtie
+        @ Option.value_map
+          ~default:[]
+          bedfile ~f:(fun f -> ["bedfile", `String f])
       in
       let json : Yojson.Basic.json =
         `Assoc [
@@ -129,6 +134,7 @@ module To_dot = struct
       ?isovar
       ?seq2hla
       ?stringtie
+      ?bedfile
       ~metadata
       meta =
     fun ~var_count ->
@@ -153,6 +159,9 @@ module To_dot = struct
         @ opt "isovar" isovar
         @ opt "seq2hla" seq2hla
         @ opt "stringtie" stringtie
+        @ Option.value_map
+          ~default:[]
+          bedfile ~f:(fun f -> ["bedfile", `String f])
       )
 
 
@@ -255,6 +264,7 @@ module To_workflow
       ?isovar
       ?seq2hla
       ?stringtie
+      ?bedfile
       ~metadata
       run_name =
     let open Ketrew.EDSL in
@@ -389,6 +399,8 @@ module To_workflow
           "Stringtie",
           Option.map stringtie ~f:(fun i ->
               (get_gtf i)#product#path);
+          "Bedfile",
+          Option.map bedfile ~f:(fun f -> f);
         ]
       in
       sprintf "<h2>Results</h2><ul>%s</ul>"

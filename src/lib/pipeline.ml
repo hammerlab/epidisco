@@ -63,6 +63,7 @@ module Parameters = struct
     with_mutect2: bool [@default false];
     with_varscan: bool [@default false];
     with_somaticsniper: bool [@default false];
+    bedfile: string option [@default None];
     experiment_name: string [@main];
     reference_build: string;
     normal: Biokepi.EDSL.Library.Input.t;
@@ -162,25 +163,34 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
 
   let vcfs
+      ?bedfile
       ~with_mutect2
       ~with_varscan
       ~with_somaticsniper
       ~reference_build ~normal ~tumor =
-    [
-      "strelka", true, Bfx.strelka () ~normal ~tumor ~configuration:strelka_config;
-      "mutect", true, Bfx.mutect () ~normal ~tumor ~configuration:mutect_config;
-      "haplo-normal", false, Bfx.gatk_haplotype_caller normal;
-      "haplo-tumor", false, Bfx.gatk_haplotype_caller tumor;
-    ]
-    @ (if with_mutect2
-       then ["mutect2", true, Bfx.mutect2 ~normal ~tumor ()]
-       else [])
-    @ (if with_varscan
-       then ["varscan", true, Bfx.varscan_somatic ~normal ~tumor ()]
-       else [])
-    @ (if with_somaticsniper
-       then ["somatic-sniper", true, Bfx.somaticsniper ~normal ~tumor ()]
-       else [])
+    let opt_vcf test name somatic vcf =
+      if test then [name, somatic, vcf] else []
+    in
+    let vcfs =
+      [
+        "strelka", true, Bfx.strelka () ~normal ~tumor ~configuration:strelka_config;
+        "mutect", true, Bfx.mutect () ~normal ~tumor ~configuration:mutect_config;
+        "haplo-normal", false, Bfx.gatk_haplotype_caller normal;
+        "haplo-tumor", false, Bfx.gatk_haplotype_caller tumor;
+      ]
+      @ opt_vcf with_mutect2
+        "mutect2" true (Bfx.mutect2 ~normal ~tumor ())
+      @ opt_vcf with_varscan
+        "varscan" true (Bfx.varscan_somatic ~normal ~tumor ())
+      @ opt_vcf with_somaticsniper
+        "somatic-sniper" true (Bfx.somaticsniper ~normal ~tumor ())
+    in
+    match bedfile with
+    | None -> vcfs
+    | Some bedfile ->
+      let bed = (Bfx.bed (Bfx.input_url bedfile)) in
+      List.map vcfs ~f:(fun (name, s, v) -> name, s, Bfx.filter_to_region v bed)
+
 
   let qc fqs =
     Bfx.concat fqs |> Bfx.fastqc
@@ -223,9 +233,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       Bfx.flagstat normal_bam |> Bfx.save "normal-bam-flagstat",
       Bfx.flagstat tumor_bam |> Bfx.save "tumor-bam-flagstat"
     in
+    let bedfile = parameters.bedfile in
     let vcfs =
       let {with_mutect2; with_varscan; with_somaticsniper; _} = parameters in
       vcfs
+        ?bedfile
         ~with_mutect2
         ~with_varscan
         ~with_somaticsniper
@@ -277,7 +289,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     Bfx.observe (fun () ->
         Bfx.report
           (Parameters.construct_run_name parameters)
-          ~vcfs:maybe_annotated
+          ~vcfs:maybe_annotated ?bedfile
           ~qc_normal:(qc normal |> Bfx.save "QC:normal")
           ~qc_tumor:(qc tumor |> Bfx.save "QC:tumor")
           ~normal_bam ~tumor_bam ?rna_bam

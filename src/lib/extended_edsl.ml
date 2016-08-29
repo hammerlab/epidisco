@@ -58,6 +58,7 @@ module Apply_functions (B : Semantics) = struct
       ?isovar
       ?seq2hla
       ?stringtie
+      ?bedfile
       ~metadata
       meta =
     let open The_pass.Transformation in
@@ -76,6 +77,7 @@ module Apply_functions (B : Semantics) = struct
            ?isovar:(Option.map isovar bwd)
            ?seq2hla:(Option.map seq2hla bwd)
            ?stringtie:(Option.map stringtie bwd)
+           ?bedfile
            ~metadata
         )
 end

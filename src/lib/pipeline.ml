@@ -289,7 +289,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     Bfx.observe (fun () ->
         Bfx.report
           (Parameters.construct_run_name parameters)
-          ~vcfs:maybe_annotated
+          ~vcfs:maybe_annotated ?bedfile
           ~qc_normal:(qc normal |> Bfx.save "QC:normal")
           ~qc_tumor:(qc tumor |> Bfx.save "QC:tumor")
           ~normal_bam ~tumor_bam ?rna_bam

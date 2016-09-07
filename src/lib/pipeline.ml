@@ -280,7 +280,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           parameters.reference_build
           somatic_vcfs
           bam
-          `Random
+          `NetMHCcons
           alleles
         |> Bfx.save "Vaxrank"
       ) in

@@ -5,11 +5,11 @@
 This quickstart guide will get you running Epidisco on test data (or your own)
 on the GCloud platform, using our Kubernetes scheduler, Coclobas.
 
-To keep things as simple as possible, we use a script (`please.sh`) to do most
-of the work. If you're interested in what's going on behind the scenes, please
-check out the script, which is documented, or you can always try `./please.sh
+To keep things as simple as possible, we use a script (`disco.sh`) to do most
+of the work. If you're interested in what's going on behind the scenes, disco
+check out the script, which is documented, or you can always try `./disco.sh
 type <command>` to see what a particular command is doing, and just
-`./please.sh` to get a list of all possible commands.
+`./disco.sh` to get a list of all possible commands.
 
 ### Set Up a Launch Box
 
@@ -17,7 +17,7 @@ We need a server on GCloud to run our scheduler and Ketrew, our workflow
 engine. This box will serve as the interface between your workflow and GCloud's running
 of them.
 
-You'll need the GCloud command line utility, installed
+You'll need the GCloud command line utility, installed and initialized
 [from here](https://cloud.google.com/sdk/downloads#interactive).
 
 Download our setup script and use it to create a GCloud box:
@@ -44,8 +44,14 @@ this box for you already.
 ./disco.sh configure
 ```
 
-TODO: how to get GATK_JAR_URL. MUTECT_JAR_URL, NET_MHC_jars...
-TODO: explain what's going on, and that the config file is editable by hand
+**NOTE** You will need to edit this configuration file by hand, to point the
+`GATK_JAR_URL` and `MUTECT_JAR_URL` to the jar files of those programs,
+respectively, somewhere on a network that GCloud can reach. If you aren't using
+these programs in your workflows, you don't need to worry about this, but since
+we are in the example workflow below, you do. While Biokepi will automatically
+download and install most tools, the authors of these tools have put them behind
+passwords and licenses that make it impossible to provide this convenience to
+you.
 
 Next we want to set up and run our Docker image, which is where Coclobas and
 Ketrew will be running, and eventually is where we will submit our workflows
@@ -126,6 +132,4 @@ You can watch the run execute through the Ketrew Web UI found at `./disco.sh
 ketrew-ui`; the result of the run can be found in `$BIOKEPI_WORK_DIR/results`.
 
 
-## Shutting it all down
 
-TODO

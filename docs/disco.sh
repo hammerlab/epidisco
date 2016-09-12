@@ -1,6 +1,25 @@
-trap 'exit' ERR
+set -e
+set -o pipefail
 
-export GCLOUD_ZONE="us-east1-c"
+################################################################################
+# Some optional settings for this script are found and documented below.       #
+################################################################################
+
+# Size of the boot disk for the GCloud launch box, in GB
+if [[ -z "$BOX_BOOT_DISK_SIZE" ]] ; then
+    BOX_BOOT_DISK_SIZE=40
+fi
+
+# Zone which compute nodes will be deployed on.
+if [[ -z "$GCLOUD_ZONE" ]] ; then
+    GCLOUD_ZONE="us-east1-c"
+fi
+
+# Number of compute nodes in the deployed cluster.
+if [[ -z "$CLUSTER_MAX_NODES" ]] ; then
+    CLUSTER_MAX_NODES=15
+fi
+
 
 if [[ "$#" == "0" ]]; then
     cat <<EOF
@@ -17,14 +36,17 @@ create () {
     local boxname="$1"; shift
     local path="`dirname \"$0\"`"
     local path="`( cd \"$path\" && pwd )`"
-    local script="$0"
+    local script="$path/${0##*/}"
+    # We make a small default box on which we will run our Docker image
+    # containing the Ketrew and Coclobas servers
     gcloud compute instances create $boxname \
            --image-family ubuntu-1604-lts --image-project ubuntu-os-cloud \
-           --zone us-east1-c --scopes cloud-platform --boot-disk-size 40GB
+           --zone $GCLOUD_ZONE --scopes cloud-platform --boot-disk-size ${BOX_BOOT_DISK_SIZE}GB
+    # We need to open the box's firewall to let HTTPS traffic through.
     gcloud compute firewall-rules create https-on-$boxname --allow tcp:443 \
            --source-tags=$boxname --source-ranges 0.0.0.0/0
-    # ##*/ gets the basename of "script"
-    gcloud compute copy-files $path/${script##*/} $boxname:~
+    # Next we copy this script onto the newly-created box, so we can use it there
+    gcloud compute copy-files $script $boxname:~
 }
 
 get-external-ip () {
@@ -35,12 +57,10 @@ get-external-ip () {
 }
 
 configure () {
-    # TODO
-    # 1. GATK/MUTECT/NETMHC URLS
-    # 2. NFS mounts
     local boxname=$(hostname)
     local nfsserver=$boxname-nfs
     local externalip=$(get-external-ip)
+    local token=$(cat /dev/urandom | env LC_CTYPE=C tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
     cat <<EOF > configuration.env
 ## Template for Configuring Ketrew with Coclobas scripts
 
@@ -54,12 +74,10 @@ export EXTERNAL_IP=$externalip
 export GCLOUD_ZONE=$GCLOUD_ZONE
 
 ## Choose an authentication token for the Ketrew server:
-#
-export TOKEN=$(cat /dev/urandom | env LC_CTYPE=C tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+export TOKEN=$token
 
 ## Number of compute nodes in the deployed cluster:
-#
-export CLUSTER_MAX_NODES=15
+export CLUSTER_MAX_NODES=$CLUSTER_MAX_NODES
 
 ## Description of the NFS services that we want the containers to mount
 ##
@@ -100,23 +118,30 @@ export BIOKEPI_WORK_DIR=/nfs-pool/biokepi/
 # export GATK_JAR_URL="http://example.com/GATK.jar"
 # export MUTECT_JAR_URL="http://example.com/Mutect.jar"
 EOF
-    gcloud config set compute/zone $GCLOUD_ZONE
+    echo "Created ./configuration.env"
 }
 
 # meant to be sudo-executed
 setup-docker () {
+    local path="`dirname \"$0\"`"
+    local path="`( cd \"$path\" && pwd )`"
+    local script="$path/${0##*/}"
     apt-get install -y docker.io
     docker pull hammerlab/coclobas
     mkdir -p /tmp/coclo
     chmod 777 /tmp/coclo
     cp configuration.env /tmp/coclo
-    cp $0 /tmp/coclo
+    cp $script /tmp/coclo
+    echo "Copied configuration.env and disco.sh to /tmp/coclo"
 }
 
 # meant to be sudo-executed
 # - `--privileged` is for NFS mounting
 # - `-p 443:443` is to pass the port 443 to the container
 enter-docker () {
+    echo "Mounting local /tmp/coclo to Docker's /coclo"
+    echo "cd to /coclo to get access to your config and disco.sh"
+    echo "...entering the Docker!"
     docker run -it -p 443:443 -v /tmp/coclo:/coclo \
            --privileged hammerlab/coclobas bash
 }
@@ -125,7 +150,7 @@ enter-docker () {
 # Inside the Docker image #
 ###########################
 
-cluster-status () {=
+cluster-status () {
     echo $(curl http://localhost:8082/status)
 }
 
@@ -141,7 +166,7 @@ create-nfs () {
     source /coclo/configuration.env
     # This utility (https://github.com/cioc/gcloudnfs) is pre-installed on the
     # Docker image.
-    gcloudnfs create --zone us-east1-c --project $project \
+    gcloudnfs create --zone $GCLOUD_ZONE --project $project \
               --network default --machine-type n1-standard-1 \
               --server-name $NFS_SERVER_NAME \
               --data-disk-name $NFS_SERVER_NAME-disk --data-disk-type pd-standard \
@@ -161,7 +186,6 @@ create-pipeline-script () {
 
 let () =
   Epidisco.Command_line.main ~biokepi_machine ()
-
 EOF
     echo "Created ./run_pipeline.ml"
 
@@ -172,12 +196,19 @@ setup-epidisco () {
     create-pipeline-script
     wget https://raw.githubusercontent.com/hammerlab/coclobas/master/tools/docker/biokepi_machine.ml
     source configuration.env
+    # EXTERNAL_IP and TOKEN both come from configuration.env
     ketrew init --conf ./_kclient_config/ --just-client https://$EXTERNAL_IP/gui?token=$TOKEN
 }
 
 submit-test () {
     source configuration.env
-    export DREAM=https://storage.googleapis.com/dream-challenge
+    if [[  -z "$GATK_JAR_URL" ]]; then
+        exit "You need to set GATK_JAR_URL in your configuration.env in order to submit this job."
+    fi
+    if [[  -z "$MUTECT_JAR_URL" ]]; then
+        exit "You need to set MUTECT_JAR_URL in your configuration.env in order to submit this job."
+    fi
+    DREAM=https://storage.googleapis.com/dream-challenge
     KETREW_CONFIGURATION=_kclient_config/configuration.ml \
         ocaml run_pipeline.ml pipeline \
           --normal $DREAM/synthetic.challenge.set2.normal.bam \
@@ -188,7 +219,7 @@ submit-test () {
 }
 
 start-all () {
-    # This script comes on the Docker image
+    # The please.sh script comes on the Docker image, and is part of Coclobas
     please.sh /coclo/configuration.env start_all
 }
 

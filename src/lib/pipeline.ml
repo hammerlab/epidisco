@@ -206,17 +206,18 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ~configuration:indel_realigner_config
 
   let hla fqs =
-    Bfx.seq2hla (Bfx.concat fqs)
+    Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save "Seq2HLA"
 
-    let rna_pipeline ~reference_build fqs =
+  let rna_pipeline ~reference_build ~with_seq2hla fqs =
     let bam = rna_bam ~reference_build fqs in
     (
       Some (bam |> Bfx.save "rna-bam"),
       Some (bam |> Bfx.stringtie |> Bfx.save "stringtie"),
       (* Seq2HLA does not work on mice: *)
-      (match reference_build with
-      | "mm10" -> None
-      | _ -> Some (hla fqs)),
+      (match reference_build, with_seq2hla with
+      | "mm10", _ -> None
+      | _, false -> None
+      | _, true -> Some (hla fqs)),
       Some (bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat")
     )
 
@@ -251,6 +252,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | None -> None, None, None, None
       | Some r ->
         rna_pipeline r ~reference_build:parameters.reference_build
+          ~with_seq2hla:parameters.with_seq2hla
     in
     let maybe_annotated =
       match parameters.reference_build with
@@ -260,7 +262,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
             |> fun a -> (k, Bfx.save ("VCF-annotated-" ^ k) a))
       | _ -> List.map vcfs ~f:(fun (name, somatic, v) -> name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
-    let seq2hla = if not parameters.with_seq2hla then None else seq2hla in
     let mhc_alleles =
       begin match parameters.mhc_alleles, seq2hla with
       | Some alleles, _ -> Some (Bfx.mhc_alleles (`Names alleles))

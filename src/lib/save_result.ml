@@ -205,6 +205,10 @@ module To_workflow
       Mem.add_to_save key [
         saved ~is_directory:true wf#product#output_folder_path wf;
       ]
+    | Seq2hla_result wf ->
+      Mem.add_to_save key [
+        saved ~is_directory:true wf#product#work_dir_path wf;
+      ]
     | other ->
       ksprintf failwith
         "To_workflow.register non-{Bam or Vcf}: not implemented: %s"

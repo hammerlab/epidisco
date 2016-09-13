@@ -1,26 +1,24 @@
-Epidisco
-========
+# Epidisco
 
-Epitope discovery and vaccine prediction family of pipelines.
+Epidisco is a highly-configurable genomic pipeline. It supports alignment, the
+GATK, variant calling, epitope discovery, and vaccine generation.
 
+It uses [Biokepi](https://github.com/hammerlab/biokepi) to construct
+[Ketrew](https://github.com/hammerlab/ketrew) workflows, which can use Torque,
+YARN, and even Kubernetes on Google Cloud (via
+[Coclobas](https://github.com/hammerlab/coclobas)) to schedule on many kinda of
+clusters.
 
-Usage
------
+## Usage
 
-You need a cluster; abstracted as a `Biokepi.Machine.t`.
+Getting started with Epidisco is most easily done by setting up a GCloud cluster
+following [these instructions](./docs/), which also cover how to submit an
+Epidisco job.
 
-You can get one on Google Cloud following the instructions there:
-<https://github.com/smondet/stratotemplate>
+### Advanced Usage
 
-The template provides a `biokepi_machine.ml` file.
-
-In the same Docker environment (the one we enter with
-`sudo  docker run -it  -v $PWD:/hostuff/ smondet/stratocumulus bash`):
-
-    opam pin add --yes epidisco "https://github.com/hammerlab/epidisco.git"
-
-A script with command-line parsing and all can be created from the
-`Epidisco` library:
+For more advanced uses, you can build `Epidisco` with `omake`, and then run it
+using an ocaml script like the following (calling it, say, `epi.ml`).
 
 ```ocaml
 #use "topfind";;
@@ -32,3 +30,6 @@ A script with command-line parsing and all can be created from the
 let () =
   Epidisco.Command_line.main ~biokepi_machine ()
 ```
+
+Call it with `ocaml epi.ml` to see the possible options.
+

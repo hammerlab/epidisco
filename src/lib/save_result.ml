@@ -63,7 +63,7 @@ let make_saving_node
       )
   in
   let name =
-    sprintf "Salvation: %s" (Filename.basename path) in
+    sprintf "Saved: %s" key in
   let product =
     single_file ~host:(Biokepi.Machine.as_host run_with) copied_path in
   let ensures =

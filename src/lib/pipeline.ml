@@ -258,7 +258,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         List.map vcfs ~f:(fun (k, somatic, vcf) ->
             Bfx.vcf_annotate_polyphen parameters.reference_build vcf
             |> fun a -> (k, Bfx.save ("VCF-annotated-" ^ k) a))
-      | _ -> List.map vcfs ~f:(fun (name, somatic, v) -> name, v)
+      | _ -> List.map vcfs ~f:(fun (name, somatic, v) -> name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
     let seq2hla = if not parameters.with_seq2hla then None else seq2hla in
     let mhc_alleles =

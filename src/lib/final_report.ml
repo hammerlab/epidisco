@@ -386,16 +386,19 @@ module To_workflow
         @ [
           "Vaxrank",
           Option.map vaxrank ~f:(fun i ->
-              (get_vaxrank_result i)#product#path);
+              (get_vaxrank_result i)#product#text_report_path);
           "Topiary",
           Option.map topiary ~f:(fun i ->
               (get_topiary_result i)#product#path);
           "Isovar",
           Option.map isovar ~f:(fun i ->
               (get_isovar_result i)#product#path);
-          "Seq2HLA",
+          "Seq2HLA-class1",
           Option.map seq2hla ~f:(fun i ->
-              (get_seq2hla_result i)#product#path);
+              (get_seq2hla_result i)#product#class1_path);
+          "Seq2HLA-class2",
+          Option.map seq2hla ~f:(fun i ->
+              (get_seq2hla_result i)#product#class2_path);
           "Stringtie",
           Option.map stringtie ~f:(fun i ->
               (get_gtf i)#product#path);

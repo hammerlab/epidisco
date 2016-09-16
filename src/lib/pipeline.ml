@@ -169,7 +169,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ~with_somaticsniper
       ~reference_build ~normal ~tumor =
     let opt_vcf test name somatic vcf =
-      if test then [name, somatic, vcf] else []
+      if test then [name, somatic, vcf ()] else []
     in
     let vcfs =
       [
@@ -179,11 +179,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         "haplo-tumor", false, Bfx.gatk_haplotype_caller tumor;
       ]
       @ opt_vcf with_mutect2
-        "mutect2" true (Bfx.mutect2 ~normal ~tumor ())
+        "mutect2" true (fun () -> Bfx.mutect2 ~normal ~tumor ())
       @ opt_vcf with_varscan
-        "varscan" true (Bfx.varscan_somatic ~normal ~tumor ())
+        "varscan" true (fun () -> Bfx.varscan_somatic ~normal ~tumor ())
       @ opt_vcf with_somaticsniper
-        "somatic-sniper" true (Bfx.somaticsniper ~normal ~tumor ())
+        "somatic-sniper" true (fun () -> Bfx.somaticsniper ~normal ~tumor ())
     in
     match bedfile with
     | None -> vcfs

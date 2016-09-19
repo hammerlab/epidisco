@@ -20,10 +20,18 @@ of them.
 You'll need the GCloud command line utility, installed and initialized
 [from here](https://cloud.google.com/sdk/downloads#interactive).
 
+Optionally set your preferred zone and cluster sizes before you get started:
+
+```shell
+# disco.sh defaults
+export GCLOUD_ZONE="us-east1-c"
+export CLUSTER_MAX_NODES=15
+```
+
 Download our setup script and use it to create a GCloud box:
 
 ```shell
-wget https://...
+wget https://raw.githubusercontent.com/hammerlab/epidisco/master/docs/disco.sh
 chmod 777 disco.sh
 ./disco.sh create example-box-name
 ```
@@ -66,7 +74,7 @@ sudo bash ./disco.sh enter-docker
 
 ```shell
 cd /coclo
-./disco.sh create-nfs 1000  # size in GB
+./disco.sh create-nfs 10000  # size in GB
 ./disco.sh start-all
 ```
 

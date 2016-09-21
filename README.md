@@ -6,7 +6,7 @@ GATK, variant calling, epitope discovery, and vaccine generation.
 It uses [Biokepi](https://github.com/hammerlab/biokepi) to construct
 [Ketrew](https://github.com/hammerlab/ketrew) workflows, which can use Torque,
 YARN, and even Kubernetes on Google Cloud (via
-[Coclobas](https://github.com/hammerlab/coclobas)) to schedule on many kinda of
+[Coclobas](https://github.com/hammerlab/coclobas)) to schedule on many kinds of
 clusters.
 
 ## Usage

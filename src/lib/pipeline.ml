@@ -258,7 +258,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       match parameters.reference_build with
       | "b37" | "hg19" ->
         List.map vcfs ~f:(fun (k, somatic, vcf) ->
-            Bfx.vcf_annotate_polyphen parameters.reference_build vcf
+            Bfx.vcf_annotate_polyphen vcf
             |> fun a -> (k, Bfx.save ("VCF-annotated-" ^ k) a))
       | _ -> List.map vcfs ~f:(fun (name, somatic, v) -> name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
@@ -278,7 +278,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       >>= fun alleles ->
       return (
         Bfx.vaxrank
-          parameters.reference_build
           somatic_vcfs
           bam
           `NetMHCcons

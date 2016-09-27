@@ -56,11 +56,15 @@ get-external-ip () {
     echo $ip
 }
 
+random-string () {
+    cat /dev/urandom | env LC_CTYPE=C tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 | echo
+}
+
 configure () {
     local boxname=$(hostname)
     local nfsserver=$boxname-nfs
     local externalip=$(get-external-ip)
-    local token=$(cat /dev/urandom | env LC_CTYPE=C tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+    local token=$(random-string)
     cat <<EOF > configuration.env
 ## Template for Configuring Ketrew with Coclobas scripts
 
@@ -226,6 +230,14 @@ start-all () {
 ketrew-ui () {
     source configuration.env
     echo https://$EXTERNAL_IP/gui?token=$TOKEN
+}
+
+publish-to-bucket () {
+    local results_directory=$1
+    local bucket=$2
+    local path=$(random-string)
+    gsutil -m -h "Cache-Control:private" rsync -r $results_directory gs://$bucket/$path
+    gsutil -m acl ch -r -g AllUsers:R gs://$bucket/$path
 }
 
 $*

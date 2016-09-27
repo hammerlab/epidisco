@@ -186,17 +186,18 @@ fill-up-cache () {
         return 2
     fi
 
+    source /coclo/configuration.env
+
     echo "Getting a precomputed $dir from $url"
     mkdir -m a+rwx -p $BIOKEPI_WORK_DIR/4dir
 
-    gsutil version -l
-    
     sudo apt-get install -y gcc python-dev python-setuptools
     sudo easy_install -U pip
-    #pip uninstall crcmod
     sudo pip install -U crcmod
+
     gsutil -m cp $url \
         $BIOKEPI_WORK_DIR/$dir/$(basename $url)
+
     ( cd $BIOKEPI_WORK_DIR/$dir/ ; tar xvfz $(basename $url) )
     chmod -R 777 /nfs-pool/
 }

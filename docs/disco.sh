@@ -57,7 +57,11 @@ get-external-ip () {
 }
 
 random-string () {
-    cat /dev/urandom | env LC_CTYPE=C tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 | echo
+    local length=$1
+    if [[ -z "$length" ]]; then
+        length=32
+    fi
+    cat /dev/urandom | env LC_CTYPE=C tr -dc 'a-zA-Z0-9' | fold -w $length | head -n 1
 }
 
 configure () {
@@ -235,9 +239,23 @@ ketrew-ui () {
 publish-to-bucket () {
     local results_directory=$1
     local bucket=$2
-    local path=$(random-string)
-    gsutil -m -h "Cache-Control:private" rsync -r $results_directory gs://$bucket/$path
-    gsutil -m acl ch -r -g AllUsers:R gs://$bucket/$path
+    local path=$3
+    if [[ -z "$results_directory" ]]; then
+        echo "Results directory requires ($1)"
+        exit 2
+    fi
+    if [[ -z "$" ]]; then
+        echo "Bucket required ($2)"
+        exit 2
+    fi
+    if [[ -z "$path" ]]; then
+        echo "Path not set, creating random path"
+        path=$(random-string 64)
+    fi
+    local res=gs://$bucket/$path
+    gsutil -m -h "Cache-Control:private" rsync -r $results_directory $res
+    gsutil -m acl ch -r -g AllUsers:R $res
+    echo "Created bucket at $res"
 }
 
 $*

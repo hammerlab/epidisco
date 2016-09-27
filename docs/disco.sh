@@ -132,6 +132,7 @@ setup-docker () {
     chmod 777 /tmp/coclo
     cp configuration.env /tmp/coclo
     cp $script /tmp/coclo
+    chmod -R 777 /tmp/coclo
     echo "Copied configuration.env and disco.sh to /tmp/coclo"
 }
 

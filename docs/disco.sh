@@ -177,6 +177,30 @@ create-nfs () {
     touch /nfs-pool/.witness.txt
 }
 
+fill-up-cache () {
+
+    local url=$1
+    local dir=$2
+    if [ "$url" = "" ] || [ "$dir" = "" ] ; then
+        echo "Usage: $0 fill-up-cache <GCloud-Bucket-URL> <directory-to-fill>"
+        return 2
+    fi
+
+    echo "Getting a precomputed $dir from $url"
+    mkdir -m a+rwx -p $BIOKEPI_WORK_DIR/4dir
+
+    gsutil version -l
+    
+    sudo apt-get install -y gcc python-dev python-setuptools
+    sudo easy_install -U pip
+    #pip uninstall crcmod
+    sudo pip install -U crcmod
+    gsutil -m cp $url \
+        $BIOKEPI_WORK_DIR/$dir/$(basename $url)
+    ( cd $BIOKEPI_WORK_DIR/$dir/ ; tar xvfz $(basename $url) )
+    chmod -R 777 /nfs-pool/
+}
+
 create-pipeline-script () {
     cat <<EOF > run_pipeline.ml
 #use "topfind";;

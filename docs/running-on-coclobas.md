@@ -51,6 +51,9 @@ this box for you already.
 # Optional: change this if you need a bigger/smaller cluster
 export CLUSTER_MAX_NODES=15
 
+# Change the following only if you changed the zone during the initial setup
+export GCLOUD_ZONE="us-east1-c"
+
 # Configure
 ./disco.sh configure
 ```

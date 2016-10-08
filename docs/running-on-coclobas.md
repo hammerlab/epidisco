@@ -20,12 +20,11 @@ of them.
 You'll need the GCloud command line utility, installed and initialized
 [from here](https://cloud.google.com/sdk/downloads#interactive).
 
-Optionally set your preferred zone and cluster sizes before you get started:
+Optionally set your preferred zone before you get started:
 
 ```shell
-# disco.sh defaults
+# disco.sh default
 export GCLOUD_ZONE="us-east1-c"
-export CLUSTER_MAX_NODES=15
 ```
 
 Download our setup script and use it to create a GCloud box:
@@ -49,6 +48,13 @@ machine. Note that `disco.sh` should have been copied to your home directory on
 this box for you already.
 
 ```shell
+# Optional: change this if you need a bigger/smaller cluster
+export CLUSTER_MAX_NODES=15
+
+# Change the following only if you changed the zone during the initial setup
+export GCLOUD_ZONE="us-east1-c"
+
+# Configure
 ./disco.sh configure
 ```
 

@@ -125,6 +125,10 @@ export BIOKEPI_WORK_DIR=/nfs-pool/biokepi/
 ## Usual Biokepi variables used to download Broad software:
 # export GATK_JAR_URL="http://example.com/GATK.jar"
 # export MUTECT_JAR_URL="http://example.com/Mutect.jar"
+
+## Default ketrew configuration location
+export KETREW_CONFIGURATION=/coclo/_kclient_config/configuration.ml
+
 EOF
     echo "Created ./configuration.env"
 }

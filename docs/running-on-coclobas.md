@@ -91,7 +91,9 @@ You should now be in a screen session with four windows.
 - `Sudo-tlstunnel`
 - `bash`
 
-You will be in the `bash` window.
+You will be in the `bash` window. 
+*Note: you can move between `screen` windows with `C-a window-number` 
+(control+a and the number of the window you want to switch to.*
 
 The first time the Coclobas server is started, it needs to create a the
 Kubernetes cluster. This may take about 5-10 minutes; you can check its status

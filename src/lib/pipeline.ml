@@ -45,6 +45,14 @@ let star_config =
     overhang_length = None;
   }
 
+let vaxrank_config =
+  let open Biokepi.Tools.Vaxrank.Configuration in
+  { default with
+    name = "PGV-configuration";
+    padding_around_mutation = 5;
+    max_vaccine_peptides_per_mutation = 3;
+    max_mutations_in_report = 20; }
+
 
 let strelka_config = Biokepi.Tools.Strelka.Configuration.exome_default
 let mutect_config = Biokepi.Tools.Mutect.Configuration.default
@@ -278,6 +286,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       >>= fun alleles ->
       return (
         Bfx.vaxrank
+          ~configuration:vaxrank_config
           somatic_vcfs
           bam
           `NetMHCcons

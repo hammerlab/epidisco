@@ -145,6 +145,7 @@ let pipeline_term
       in
       pure begin fun
         (`Dry_run dry_run)
+        (`Mouse_run mouse_run)
         (`With_seq2hla with_seq2hla)
         (`With_mutect2 with_mutect2)
         (`With_varscan with_varscan)
@@ -172,6 +173,7 @@ let pipeline_term
           let params =
             Pipeline.Parameters.make experiment_name
               ~bedfile
+              ~mouse_run
               ~reference_build ~normal ~tumor ?rna
               ?mhc_alleles
               ~with_seq2hla
@@ -187,6 +189,13 @@ let pipeline_term
         pure (fun b -> `Dry_run b)
         $ Arg.(
             value & flag & info ["dry-run"] ~doc:"Dry-run; do not submit"
+          )
+      end
+      $ begin
+        pure (fun b -> `Mouse_run b)
+        $ Arg.(
+            value & flag & info ["mouse-run"]
+              ~doc:"Mouse-run; use mouse-specific config (no COSMIC)"
           )
       end
       $ tool_option (fun e -> `With_seq2hla e) "seq2hla"

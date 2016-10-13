@@ -168,7 +168,7 @@ module To_dot = struct
 end
 
 module Extend_file_spec = struct
-  
+
   include Biokepi.EDSL.Compile.To_workflow.File_type_specification
   open Biokepi_run_environment.Common.KEDSL
 
@@ -443,7 +443,7 @@ module To_workflow
         ]
       in
       let cat_flatstat f =
-        sprintf "cat %s" 
+        sprintf "cat %s"
           (Config.saving_path
            // Save_result.construct_relative_path ~work_dir:Config.work_dir
              (get_flagstat_result f)#product#path) in

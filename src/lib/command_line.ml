@@ -60,18 +60,21 @@ let run_pipeline
     end;
     SmartPrint.to_string 2 72 dot
   in
+  let work_directory =
+    match work_directory with
+    | None  ->
+      Biokepi.Machine.work_dir biokepi_machine //
+      Pipeline.Parameters.construct_run_directory params
+    | Some w -> w
+  in
   Mem.save_dot_content dot_content;
   let module Workflow_compiler =
     Extended_edsl.To_workflow
       (struct
         include Biokepi.EDSL.Compile.To_workflow.Defaults
         let machine = biokepi_machine
-        let work_dir =
-          match work_directory with
-          | None  ->
-            Biokepi.Machine.work_dir machine //
-            Pipeline.Parameters.construct_run_directory params
-          | Some w -> w
+        let work_dir = work_directory
+        let run_name = run_name
         let saving_path = results_path // run_name
       end)
       (Mem)
@@ -145,7 +148,6 @@ let pipeline_term
       in
       pure begin fun
         (`Dry_run dry_run)
-        (`Mouse_run mouse_run)
         (`With_seq2hla with_seq2hla)
         (`With_mutect2 with_mutect2)
         (`With_varscan with_varscan)
@@ -159,6 +161,10 @@ let pipeline_term
         (`Output_dot output_dot_to_png)
         (`Mhc_alleles mhc_alleles)
         (`Experiment_name experiment_name)
+        (`Mailgun_api_key mailgun_api_key)
+        (`Mailgun_domain mailgun_domain_name)
+        (`From_email from_email)
+        (`To_email to_email)
         ->
           let normal = parse_input_file normal_json_file ~kind:"normal" in
           let tumor = parse_input_file tumor_json_file ~kind:"tumor" in
@@ -170,12 +176,26 @@ let pipeline_term
             | file ->
               Some (parse_input_file file ~kind:"rna")
           in
+          let email_options =
+            match
+              to_email, from_email, mailgun_domain_name, mailgun_api_key with
+            | Some to_email, Some from_email,
+              Some mailgun_domain_name, Some mailgun_api_key ->
+              Some (Qc.EDSL.make_email_options
+                        ~from_email ~to_email
+                        ~mailgun_api_key ~mailgun_domain_name)
+            | None, None, None, None -> None
+            | _, _, _, _ ->
+              failwith "ERROR: If one of `to-email`, `from-email`, \
+                        `mailgun-api-key`, `mailgun-domain-name` \
+                        are specified, then they all must be."
+          in
           let params =
             Pipeline.Parameters.make experiment_name
               ~bedfile
-              ~mouse_run
               ~reference_build ~normal ~tumor ?rna
               ?mhc_alleles
+              ?email_options
               ~with_seq2hla
               ~with_mutect2
               ~with_varscan
@@ -189,13 +209,6 @@ let pipeline_term
         pure (fun b -> `Dry_run b)
         $ Arg.(
             value & flag & info ["dry-run"] ~doc:"Dry-run; do not submit"
-          )
-      end
-      $ begin
-        pure (fun b -> `Mouse_run b)
-        $ Arg.(
-            value & flag & info ["mouse-run"]
-              ~doc:"Mouse-run; use mouse-specific config (no COSMIC)"
           )
       end
       $ tool_option (fun e -> `With_seq2hla e) "seq2hla"
@@ -242,6 +255,38 @@ let pipeline_term
             required & opt (some string) None
             & info ["experiment-name"; "E"]
               ~doc:"Give a name to the run(s)" ~docv:"NAME")
+      end
+      $ begin
+        pure (fun s -> `Mailgun_api_key s)
+        $ Arg.(
+            value & opt (some string) None
+            & info ["mailgun-api-key"]
+              ~doc:"Mailgun API key, used for notification emails."
+              ~docv:"MAILGUN_API_KEY")
+      end
+      $ begin
+        pure (fun s -> `Mailgun_domain s)
+        $ Arg.(
+            value & opt (some string) None
+            & info ["mailgun-domain"]
+              ~doc:"Mailgun domain, used for notification emails."
+              ~docv:"MAILGUN_DOMAIN")
+      end
+      $ begin
+        pure (fun s -> `From_email s)
+        $ Arg.(
+            value & opt (some string) None
+            & info ["from-email"]
+              ~doc:"Email address used for notification emails."
+              ~docv:"FROM_EMAIL")
+      end
+      $ begin
+        pure (fun s -> `To_email s)
+        $ Arg.(
+            value & opt (some string) None
+            & info ["to-email"]
+              ~doc:"Email address to send notification emails to."
+              ~docv:"TO_EMAIL")
       end
     ) in
   (term, info)

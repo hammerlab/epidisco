@@ -168,37 +168,27 @@ module To_dot = struct
           ~default:[]
           bedfile ~f:(fun f -> ["bedfile", `String f])
       )
-
-
 end
 
 module Extend_file_spec = struct
 
   include Biokepi.EDSL.Compile.To_workflow.File_type_specification
-  open Biokepi_run_environment.Common.KEDSL
+  open Biokepi.KEDSL
 
   type _ t +=
       Final_report: single_file workflow_node -> [ `Final_report ] t
 
+  let rec to_string : type a. a t -> string =
+      function
+      | Final_report _ -> "Final report"
+      | other ->
+        Biokepi.EDSL.Compile.To_workflow.File_type_specification.to_string other
 
   let rec as_dependency_edges : type a. a t -> workflow_edge list =
-    let one_depends_on wf = [depends_on wf] in
     function
-    | To_unit v -> as_dependency_edges v
-    | Final_report wf -> one_depends_on wf
+    | Final_report wf -> [depends_on wf]
     | other ->
       Biokepi.EDSL.Compile.To_workflow.File_type_specification.as_dependency_edges other
-
-  let get_unit_workflow :
-    name: string ->
-    unit t ->
-    unknown_product workflow_node =
-    fun ~name f ->
-      match f with
-      | To_unit v ->
-        workflow_node without_product
-          ~name ~edges:(as_dependency_edges v)
-      | other -> fail_get other "get_unit_workflow"
 end
 
 (** Testing mode forgets about the dependencies and creates a fresh

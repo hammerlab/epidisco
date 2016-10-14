@@ -82,7 +82,7 @@ let run_pipeline
   let module Ketrew_pipeline_1 = Pipeline.Full(Workflow_compiler) in
   let workflow_1 =
     Ketrew_pipeline_1.run params
-    |> Final_report.Extend_file_spec.get_unit_workflow
+    |> Qc.EDSL.Extended_file_spec.get_unit_workflow
       ~name:(sprintf "Epidisco: %s %s"
                params.Pipeline.Parameters.experiment_name run_name)
   in

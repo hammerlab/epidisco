@@ -75,6 +75,70 @@ let summarize_flagstats ~machine nodes summary summary_file =
     ~make
 
 
+let summarize_qc_script =
+{bash|
+#!/bin/bash
+
+# Usage:
+#  $ bash fastqc_to_email.sh REPORT_HEADER /path/to/file1.html /path/to/file2.html ...
+#
+# requires the unzipped folder containing the summaries to be present in the same folder
+# with the HTML report!
+
+JOB_NAME=$1
+echo "# FASTQC ran for $JOB_NAME"
+shift
+
+# Convert html paths into their summary counter-parts
+SUMMARY_FILES=$(echo "$@" |sed -e 's/\.html/\/summary.txt/g')
+
+for qcsummary in $SUMMARY_FILES
+do
+  NUM_OF_PASSES=$(cat ${qcsummary} |grep PASS |wc -l |awk '{ print $1 }')
+  NUM_OF_CHECKS=$(cat ${qcsummary} |wc -l |awk '{ print $1 }')
+
+  echo "## File: $qcsummary"
+  echo "## Result: $NUM_OF_PASSES/$NUM_OF_CHECKS passed"
+  echo "## Issues: "
+  cat ${qcsummary} |grep -v "PASS" |cut -f1,2 |sed -e 's/^/ - /g'
+  echo -en "\n"
+done
+|bash}
+
+let summarize_fastqc
+    ~machine ~normal_fastqc ~tumor_fastqc ?rna_fastqc summary_file =
+  let fqc_cmd name fqc =
+    sprintf "bash ${SUMMARIZE} %s %s"
+      name
+      (String.concat ~sep:" " fqc#product#paths) in
+  let opt_map_list o f = Option.value_map o ~default:[] ~f:(fun r -> [f r]) in
+  let cmd =
+    sprintf
+      "SUMMARIZE=$(mktemp);\
+       cat << EOF > ${SUMMARIZE}\
+       %s
+       EOF
+       (%s) > %s;"
+      summarize_qc_script
+      (String.concat ~sep:"; "
+         ([fqc_cmd "normal" normal_fastqc;
+           fqc_cmd "tumor" tumor_fastqc;
+          ] @ opt_map_list rna_fastqc (fqc_cmd "rna")))
+      summary_file
+  in
+  let name = "Summarize FASTQC results" in
+  let make =
+    Biokepi.Machine.quick_run_program machine Program.(sh cmd)
+  in
+  let host = Biokepi.Machine.(as_host machine) in
+  workflow_node (single_file summary_file ~host)
+    ~name
+    ~edges:(List.map ~f:(fun n -> depends_on n)
+              ([normal_fastqc; tumor_fastqc]
+               @ opt_map_list rna_fastqc (fun i -> i)))
+    ~make
+
+
 module EDSL = struct
 
   type email_options =
@@ -90,6 +154,12 @@ module EDSL = struct
       normal:([ `Flagstat ] repr) ->
       tumor:([ `Flagstat ] repr) ->
       ?rna:([ `Flagstat ] repr) ->
+      email_options ->
+      [ `Email ] repr
+    val fastqc_email :
+      normal:([ `Fastqc ] repr) ->
+      tumor:([ `Fastqc ] repr) ->
+      ?rna:([ `Fastqc ] repr) ->
       email_options ->
       [ `Email ] repr
   end
@@ -118,9 +188,9 @@ module EDSL = struct
        end) = struct
 
     open Extended_file_spec
+    open Config
 
     let flagstat_email ~normal ~tumor ?rna email_options =
-      let open Config in
       let email =
         let get_flg =
           Biokepi.EDSL.Compile.To_workflow.File_type_specification.
@@ -138,9 +208,36 @@ module EDSL = struct
         let summary_file =
           work_dir // "flagstats-summary.txt"
         in
-        let wrapper = summarize_flagstats ~machine
-            flgs summary summary_file in
-        let subject = ("Flagstats for " ^ run_name) in
+        let wrapper =
+          summarize_flagstats ~machine flgs summary summary_file in
+        let subject = "Flagstats for " ^ run_name in
+        Email.on_success_send ~machine ~subject
+          ~to_email:email_options.to_email
+          ~from_email:email_options.from_email
+          ~mailgun_api_key:email_options.mailgun_api_key
+          ~mailgun_domain_name:email_options.mailgun_domain_name
+          wrapper
+      in
+      Email email
+
+    let fastqc_email ~normal ~tumor ?rna email_options =
+      let wrapper =
+        let get_fqc =
+          Biokepi.EDSL.Compile.To_workflow.File_type_specification.
+            get_fastqc_result
+        in
+        let normal_fastqc, tumor_fastqc, rna_fastqc =
+          get_fqc normal,
+          get_fqc tumor,
+          Option.map ~f:get_fqc rna in
+        let summary_file =
+          work_dir // "fastqc-summary.txt"
+        in
+        summarize_fastqc
+          ~machine ~normal_fastqc ~tumor_fastqc ?rna_fastqc summary_file
+      in
+      let subject = sprintf "FASTQC results for %s" run_name in
+      let email =
         Email.on_success_send ~machine ~subject
           ~to_email:email_options.to_email
           ~from_email:email_options.from_email
@@ -153,7 +250,9 @@ module EDSL = struct
 
   module To_dot = struct
     let flagstat_email ~normal ~tumor ?rna email_options =
-      (fun ~var_count -> `String "flagstat email")
+      fun ~var_count -> `String "flagstat email"
+    let fastqc_email ~normal ~tumor ?rna email_options =
+      fun ~var_count -> `String "fastqc email"
   end
 
   module To_json = struct
@@ -172,6 +271,25 @@ module EDSL = struct
         let json : Yojson.Basic.json =
           `Assoc [
             "flagstat qc email",
+            `Assoc args
+          ]
+        in
+        json
+    let fastqc_email ~normal ~tumor ?rna email_options =
+      fun ~var_count ->
+        let opt n o =
+          Option.value_map ~default:[] o ~f:(fun v -> [n, v ~var_count]) in
+        let args = [
+          "normal fastqc", normal ~var_count;
+          "tumor fastqc", tumor ~var_count;
+          "to email", `String email_options.to_email;
+          "from email", `String email_options.from_email
+        ]
+          @ opt "rna fastqc" rna
+        in
+        let json : Yojson.Basic.json =
+          `Assoc [
+            "fastqc email",
             `Assoc args
           ]
         in

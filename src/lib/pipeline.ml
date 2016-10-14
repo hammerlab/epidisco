@@ -304,30 +304,39 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ) in
     let normal = Stdlib.fastq_of_input parameters.normal in
     let tumor = Stdlib.fastq_of_input parameters.tumor in
-    let flagstat_email =
+    let fastqc_normal = qc normal |> Bfx.save "QC:normal" in
+    let fastqc_tumor = qc tumor |> Bfx.save "QC:tumor" in
+    let fastqc_rna =
+      match rna with
+      | None -> None
+      | Some rna -> Some (Bfx.save "QC:rna" (qc rna)) in
+    let emails =
       match parameters.email_options with
       | None -> None
       | Some email_options ->
-        let email =
+        let flagstat_email =
           Bfx.flagstat_email
             ~normal:normal_bam_flagstat ~tumor:tumor_bam_flagstat
             ?rna:rna_bam_flagstat email_options
         in
-        Some email in
+        let fastqc_email =
+          Bfx.fastqc_email
+            ~normal:fastqc_normal ~tumor:fastqc_tumor
+            ?rna:fastqc_rna email_options in
+        Some [flagstat_email; fastqc_email] in
     let report =
       Bfx.report
         (Parameters.construct_run_name parameters)
         ~vcfs:maybe_annotated ?bedfile
-        ~qc_normal:(qc normal |> Bfx.save "QC:normal")
-        ~qc_tumor:(qc tumor |> Bfx.save "QC:tumor")
+        ~fastqc_normal ~fastqc_tumor ?fastqc_rna
         ~normal_bam ~tumor_bam ?rna_bam
         ~normal_bam_flagstat ~tumor_bam_flagstat
         ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
         ~metadata:(Parameters.metadata parameters) in
     let observables =
-      report :: begin match flagstat_email with
+      report :: begin match emails with
       | None -> []
-      | Some e -> [Bfx.to_unit e]
+      | Some e -> List.map ~f:Bfx.to_unit e
       end in
     Bfx.observe (fun () -> Bfx.list observables |> Bfx.to_unit)
 end

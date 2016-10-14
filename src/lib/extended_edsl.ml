@@ -48,7 +48,6 @@ end
 module Apply_functions (B : Semantics) = struct
   include Biokepi.EDSL.Transform.Apply_functions(B)
   include Save_result.Do_nothing
-  (* include Qc.EDSL.Apply_functions(B) *)
 
   let flagstat_email ~normal ~tumor ?rna email_options =
     let open The_pass.Transformation in
@@ -61,10 +60,22 @@ module Apply_functions (B : Semantics) = struct
     in
     fwd email
 
+  let fastqc_email ~normal ~tumor ?rna email_options =
+    let open The_pass.Transformation in
+    let email =
+      (B.fastqc_email
+         ~normal:(bwd normal)
+         ~tumor:(bwd tumor)
+         ?rna:(Option.map rna bwd)
+         email_options)
+    in
+    fwd email
+
   let report
       ~vcfs
-      ~qc_normal
-      ~qc_tumor
+      ~fastqc_normal
+      ~fastqc_tumor
+      ?fastqc_rna
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -82,8 +93,9 @@ module Apply_functions (B : Semantics) = struct
     let open The_pass.Transformation in
     fwd (B.report meta
            ~vcfs:(List.map ~f:(fun (k, v) -> k, bwd v) vcfs)
-           ~qc_normal:(bwd qc_normal)
-           ~qc_tumor:(bwd qc_tumor)
+           ~fastqc_normal:(bwd fastqc_normal)
+           ~fastqc_tumor:(bwd fastqc_tumor)
+           ?fastqc_rna:(Option.map fastqc_rna bwd)
            ~normal_bam:(bwd normal_bam)
            ~normal_bam_flagstat:(bwd normal_bam_flagstat)
            ~tumor_bam:(bwd tumor_bam)
@@ -96,6 +108,5 @@ module Apply_functions (B : Semantics) = struct
            ?seq2hla:(Option.map seq2hla bwd)
            ?stringtie:(Option.map stringtie bwd)
            ?bedfile
-           ~metadata
-        )
+           ~metadata)
 end

@@ -108,35 +108,28 @@ done
 let summarize_fastqc
     ~machine ~normal_fastqc ~tumor_fastqc ?rna_fastqc summary_file =
   let fqc_cmd name fqc =
-    sprintf "bash ${SUMMARIZE} %s %s"
-      name
-      (String.concat ~sep:" " fqc#product#paths) in
+    let paths = (String.concat ~sep:" " fqc#product#paths) in
+    sprintf "bash ${SUMMARIZE} %s %s" name paths in
   let opt_map_list o f = Option.value_map o ~default:[] ~f:(fun r -> [f r]) in
-  let cmd =
-    Program.sh (
-      sprintf
-        "SUMMARIZE=$(mktemp);\
-         cat << EOF > ${SUMMARIZE}\
-         %s
-         EOF
-         (%s) > %s;"
-      summarize_qc_script
-      (String.concat ~sep:"; "
-         ([fqc_cmd "normal" normal_fastqc;
-           fqc_cmd "tumor" tumor_fastqc;
-          ] @ opt_map_list rna_fastqc (fqc_cmd "rna")))
-      summary_file) in
+  let fastqc_cmds =
+    List.map ([fqc_cmd "normal" normal_fastqc;
+               fqc_cmd "tumor" tumor_fastqc;
+              ] @ opt_map_list rna_fastqc (fqc_cmd "rna"))
+      ~f:(fun cmd -> Program.shf "%s >> %s" cmd summary_file) in
+  let cmd = [Program.sh "export SUMMARIZE=$(mktemp)";
+             Program.shf "cat << 'EOF' > ${SUMMARIZE}
+%s
+EOF" summarize_qc_script] @ fastqc_cmds in
   let name = "Summarize FASTQC results" in
   let make =
-    Biokepi.Machine.quick_run_program machine cmd
+    Biokepi.Machine.quick_run_program machine (Program.chain cmd)
   in
   let host = Biokepi.Machine.(as_host machine) in
   workflow_node (single_file summary_file ~host)
-    ~name
+    ~name ~make
     ~edges:(List.map ~f:(fun n -> depends_on n)
               ([normal_fastqc; tumor_fastqc]
                @ opt_map_list rna_fastqc (fun i -> i)))
-    ~make
 
 
 module EDSL = struct

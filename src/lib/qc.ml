@@ -268,11 +268,9 @@ module EDSL = struct
   module To_dot = struct
     let flagstat_email ~normal ~tumor ?rna email_options =
       fun ~var_count -> Final_report.To_dot.function_call "flagstat_email" [
-          (* TODO *)
         ]
     let fastqc_email ~normal ~tumor ?rna email_options =
       fun ~var_count -> Final_report.To_dot.function_call "fastqc_email" [
-          (* TODO *)
         ]
   end
 

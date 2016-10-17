@@ -74,6 +74,7 @@ module Parameters = struct
     with_mutect2: bool [@default false];
     with_varscan: bool [@default false];
     with_somaticsniper: bool [@default false];
+    email_options: Qc.EDSL.email_options option;
     bedfile: string option [@default None];
     experiment_name: string [@main];
     reference_build: string;
@@ -275,7 +276,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         List.map vcfs ~f:(fun (k, somatic, vcf) ->
             Bfx.vcf_annotate_polyphen vcf
             |> fun a -> (k, Bfx.save ("VCF-annotated-" ^ k) a))
-      | _ -> List.map vcfs ~f:(fun (name, somatic, v) -> name, (Bfx.save (sprintf "vcf-%s" name) v))
+      | _ -> List.map vcfs ~f:(fun (name, somatic, v) ->
+          name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
     let mhc_alleles =
       begin match parameters.mhc_alleles, seq2hla with
@@ -302,15 +304,39 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ) in
     let normal = Stdlib.fastq_of_input parameters.normal in
     let tumor = Stdlib.fastq_of_input parameters.tumor in
-    Bfx.observe (fun () ->
-        Bfx.report
-          (Parameters.construct_run_name parameters)
-          ~vcfs:maybe_annotated ?bedfile
-          ~qc_normal:(qc normal |> Bfx.save "QC:normal")
-          ~qc_tumor:(qc tumor |> Bfx.save "QC:tumor")
-          ~normal_bam ~tumor_bam ?rna_bam
-          ~normal_bam_flagstat ~tumor_bam_flagstat
-          ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
-          ~metadata:(Parameters.metadata parameters)
-      )
+    let fastqc_normal = qc normal |> Bfx.save "QC:normal" in
+    let fastqc_tumor = qc tumor |> Bfx.save "QC:tumor" in
+    let fastqc_rna =
+      match rna with
+      | None -> None
+      | Some rna -> Some (Bfx.save "QC:rna" (qc rna)) in
+    let emails =
+      match parameters.email_options with
+      | None -> None
+      | Some email_options ->
+        let flagstat_email =
+          Bfx.flagstat_email
+            ~normal:normal_bam_flagstat ~tumor:tumor_bam_flagstat
+            ?rna:rna_bam_flagstat email_options
+        in
+        let fastqc_email =
+          Bfx.fastqc_email
+            ~normal:fastqc_normal ~tumor:fastqc_tumor
+            ?rna:fastqc_rna email_options in
+        Some [flagstat_email; fastqc_email] in
+    let report =
+      Bfx.report
+        (Parameters.construct_run_name parameters)
+        ~vcfs:maybe_annotated ?bedfile
+        ~fastqc_normal ~fastqc_tumor ?fastqc_rna
+        ~normal_bam ~tumor_bam ?rna_bam
+        ~normal_bam_flagstat ~tumor_bam_flagstat
+        ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
+        ~metadata:(Parameters.metadata parameters) in
+    let observables =
+      report :: begin match emails with
+      | None -> []
+      | Some e -> List.map ~f:Bfx.to_unit e
+      end in
+    Bfx.observe (fun () -> Bfx.list observables |> Bfx.to_unit)
 end

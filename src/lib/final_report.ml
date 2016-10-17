@@ -26,8 +26,9 @@ module type Semantics = sig
   type 'a repr
   val report :
     vcfs:(string * [ `Vcf ] repr) list ->
-    qc_normal: [ `Fastqc ] repr ->
-    qc_tumor: [ `Fastqc ] repr ->
+    fastqc_normal: [ `Fastqc ] repr ->
+    fastqc_tumor: [ `Fastqc ] repr ->
+    ?fastqc_rna: [ `Fastqc ] repr ->
     normal_bam: [ `Bam ] repr ->
     normal_bam_flagstat: [ `Flagstat ] repr ->
     tumor_bam: [ `Bam ] repr ->
@@ -51,8 +52,9 @@ module To_json = struct
 
   let report
       ~vcfs
-      ~qc_normal
-      ~qc_tumor
+      ~fastqc_normal
+      ~fastqc_tumor
+      ?fastqc_rna
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -77,14 +79,15 @@ module To_json = struct
         ]
         @ List.map vcfs ~f:(fun (k, v) -> k, v ~var_count)
         @ [
-          "qc-normal", qc_normal ~var_count;
-          "qc-tumor", qc_tumor ~var_count;
+          "qc-normal", fastqc_normal ~var_count;
+          "qc-tumor", fastqc_tumor ~var_count;
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
           "normal-bam-flagstat", normal_bam_flagstat ~var_count;
           "tumor-bam-flagstat", tumor_bam_flagstat ~var_count;
         ]
         @ opt "rna-bam" rna_bam
+        @ opt "rna-fastqc" fastqc_rna
         @ opt "rna-bam-flagstat" rna_bam_flagstat
         @ opt "vaxrank" vaxrank
         @ opt "topiary" topiary
@@ -121,8 +124,9 @@ module To_dot = struct
 
   let report
       ~vcfs
-      ~qc_normal
-      ~qc_tumor
+      ~fastqc_normal
+      ~fastqc_tumor
+      ?fastqc_rna
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -145,14 +149,15 @@ module To_dot = struct
         @ List.map vcfs ~f:(fun (k, v) ->
             k, v ~var_count)
         @ [
-          "qc-normal", qc_normal ~var_count;
-          "qc-tumor", qc_tumor ~var_count;
+          "qc-normal", fastqc_normal ~var_count;
+          "qc-tumor", fastqc_tumor ~var_count;
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
           "normal-bam-flagstat", normal_bam_flagstat ~var_count;
           "tumor-bam-flagstat", tumor_bam_flagstat ~var_count;
         ]
         @ opt "rna-bam" rna_bam
+        @ opt "rna-fastqc" fastqc_rna
         @ opt "rna-bam-flagstat" rna_bam_flagstat
         @ opt "vaxrank" vaxrank
         @ opt "topiary" topiary
@@ -163,37 +168,27 @@ module To_dot = struct
           ~default:[]
           bedfile ~f:(fun f -> ["bedfile", `String f])
       )
-
-
 end
 
 module Extend_file_spec = struct
-  
+
   include Biokepi.EDSL.Compile.To_workflow.File_type_specification
-  open Biokepi_run_environment.Common.KEDSL
+  open Biokepi.KEDSL
 
   type _ t +=
       Final_report: single_file workflow_node -> [ `Final_report ] t
 
+  let rec to_string : type a. a t -> string =
+      function
+      | Final_report _ -> "Final report"
+      | other ->
+        Biokepi.EDSL.Compile.To_workflow.File_type_specification.to_string other
 
   let rec as_dependency_edges : type a. a t -> workflow_edge list =
-    let one_depends_on wf = [depends_on wf] in
     function
-    | To_unit v -> as_dependency_edges v
-    | Final_report wf -> one_depends_on wf
+    | Final_report wf -> [depends_on wf]
     | other ->
       Biokepi.EDSL.Compile.To_workflow.File_type_specification.as_dependency_edges other
-
-  let get_unit_workflow :
-    name: string ->
-    unit t ->
-    unknown_product workflow_node =
-    fun ~name f ->
-      match f with
-      | To_unit v ->
-        workflow_node without_product
-          ~name ~edges:(as_dependency_edges v)
-      | other -> fail_get other "get_unit_workflow"
 end
 
 (** Testing mode forgets about the dependencies and creates a fresh
@@ -251,8 +246,9 @@ module To_workflow
 
   let report
       ~vcfs
-      ~qc_normal
-      ~qc_tumor
+      ~fastqc_normal
+      ~fastqc_tumor
+      ?fastqc_rna
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -302,14 +298,15 @@ module To_workflow
         depends_on igv_dot_xml
         :: List.map vcfs ~f:(fun (_, v) -> get_vcf v |> depends_on)
         @ [
-          get_fastqc_result qc_normal |> depends_on;
-          get_fastqc_result qc_tumor |> depends_on;
+          get_fastqc_result fastqc_normal |> depends_on;
+          get_fastqc_result fastqc_tumor |> depends_on;
           get_bam normal_bam |> depends_on;
           get_bam tumor_bam |> depends_on;
           get_flagstat_result tumor_bam_flagstat |> depends_on;
           get_flagstat_result normal_bam_flagstat |> depends_on;
         ]
         @ opt rna_bam get_bam
+        @ opt fastqc_rna get_fastqc_result
         @ opt vaxrank get_vaxrank_result
         @ opt rna_bam_flagstat get_flagstat_result
         @ opt topiary get_topiary_result
@@ -415,14 +412,18 @@ module To_workflow
          |> String.concat ~sep:"")
     in
     let qc_section =
-      let n = get_fastqc_result qc_normal in
-      let t = get_fastqc_result qc_tumor in
+      let open Option in
+      let n = get_fastqc_result fastqc_normal in
+      let t = get_fastqc_result fastqc_tumor in
+      let r = fastqc_rna >>= fun r -> return (get_fastqc_result r) in
       let items =
         List.filter_map [
           (List.nth n#product#paths 0, "FastQC Normal : Read 1");
           (List.nth n#product#paths 1, "FastQC Normal : Read 2");
           (List.nth t#product#paths 0, "FastQC Tumor : Read 1");
           (List.nth t#product#paths 1, "FastQC Tumor : Read 2");
+          ((r >>= fun r -> List.nth r#product#paths 0), "FastQC RNA : Read 1");
+          ((r >>= fun r -> List.nth r#product#paths 1), "FastQC RNA : Read 2");
         ]
           ~f:(function
             | None, _ -> None
@@ -443,7 +444,7 @@ module To_workflow
         ]
       in
       let cat_flatstat f =
-        sprintf "cat %s" 
+        sprintf "cat %s"
           (Config.saving_path
            // Save_result.construct_relative_path ~work_dir:Config.work_dir
              (get_flagstat_result f)#product#path) in

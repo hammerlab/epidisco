@@ -273,19 +273,23 @@ module To_workflow
         ~reference_genome:(get_bam normal_bam)#product#reference_build
         ~run_id:run_name
         ~normal_bam_path:(
-          Save_result.construct_relative_path ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
+          Save_result.construct_relative_path
+            ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
         )
         ~tumor_bam_path:(
-          Save_result.construct_relative_path ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
+          Save_result.construct_relative_path
+            ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
         )
         ?rna_bam_path:(
           Option.map rna_bam ~f:(fun b ->
-              Save_result.construct_relative_path ~work_dir:Config.work_dir (get_bam b)#product#path
+              Save_result.construct_relative_path
+                ~work_dir:Config.work_dir (get_bam b)#product#path
             )
         )
         ~vcfs:(List.map vcfs ~f:(fun (name, vcf) ->
             Biokepi.Tools.Igvxml.vcf ~name
-              ~path:(Save_result.construct_relative_path ~work_dir:Config.work_dir (get_vcf vcf)#product#path)))
+              ~path:(Save_result.construct_relative_path
+                       ~work_dir:Config.work_dir (get_vcf vcf)#product#path)))
         ~output_path:(Config.saving_path // sprintf "local-igv-%s.xml" run_name)
         ()
     in
@@ -371,7 +375,7 @@ module To_workflow
       let potential_items =
         [
           "Normal-bam", Some ((get_bam normal_bam)#product#path);
-          "Tumor-bam", Some ((get_bam normal_bam)#product#path);
+          "Tumor-bam", Some ((get_bam tumor_bam)#product#path);
           "RNA-bam",
           Option.map rna_bam ~f:(fun b ->
               (get_bam b)#product#path);
@@ -396,6 +400,12 @@ module To_workflow
           "Seq2HLA-class2",
           Option.map seq2hla ~f:(fun i ->
               (get_seq2hla_result i)#product#class2_path);
+          "Seq2HLA-class1-expression",
+          Option.map seq2hla ~f:(fun i ->
+              (get_seq2hla_result i)#product#class1_expression_path);
+          "Seq2HLA-class2-expression",
+          Option.map seq2hla ~f:(fun i ->
+              (get_seq2hla_result i)#product#class2_expression_path);
           "Stringtie",
           Option.map stringtie ~f:(fun i ->
               (get_gtf i)#product#path);

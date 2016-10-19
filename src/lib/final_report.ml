@@ -175,20 +175,18 @@ module Extend_file_spec = struct
   include Biokepi.EDSL.Compile.To_workflow.File_type_specification
   open Biokepi.KEDSL
 
-  type _ t +=
-      Final_report: single_file workflow_node -> [ `Final_report ] t
+  type t +=
+      Final_report: single_file workflow_node -> t
 
-  let rec to_string : type a. a t -> string =
-      function
-      | Final_report _ -> "Final report"
-      | other ->
-        Biokepi.EDSL.Compile.To_workflow.File_type_specification.to_string other
+  let () =
+    add_to_string (function
+      | Final_report _ -> Some "Final report"
+      | other -> None);
+    add_to_dependencies_edges_function (function
+      | Final_report wf -> Some [depends_on wf]
+      | _ -> None);
+    ()
 
-  let rec as_dependency_edges : type a. a t -> workflow_edge list =
-    function
-    | Final_report wf -> [depends_on wf]
-    | other ->
-      Biokepi.EDSL.Compile.To_workflow.File_type_specification.as_dependency_edges other
 end
 
 (** Testing mode forgets about the dependencies and creates a fresh

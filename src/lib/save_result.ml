@@ -158,7 +158,7 @@ module To_workflow
 
   open Biokepi.EDSL.Compile.To_workflow.File_type_specification
 
-  let save : type a . string -> a t -> a t = fun key x ->
+  let save : string -> t -> t = fun key x ->
     let saved ?(gzip = false) ?(is_directory = false) path wf =
       object
         method path = path

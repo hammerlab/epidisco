@@ -400,6 +400,12 @@ module To_workflow
           "Seq2HLA-class2",
           Option.map seq2hla ~f:(fun i ->
               (get_seq2hla_result i)#product#class2_path);
+          "Seq2HLA-class1-expression",
+          Option.map seq2hla ~f:(fun i ->
+              (get_seq2hla_result i)#product#class1_expression_path);
+          "Seq2HLA-class2-expression",
+          Option.map seq2hla ~f:(fun i ->
+              (get_seq2hla_result i)#product#class2_expression_path);
           "Stringtie",
           Option.map stringtie ~f:(fun i ->
               (get_gtf i)#product#path);

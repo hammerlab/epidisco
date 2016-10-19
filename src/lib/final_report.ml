@@ -273,19 +273,23 @@ module To_workflow
         ~reference_genome:(get_bam normal_bam)#product#reference_build
         ~run_id:run_name
         ~normal_bam_path:(
-          Save_result.construct_relative_path ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
+          Save_result.construct_relative_path
+            ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
         )
         ~tumor_bam_path:(
-          Save_result.construct_relative_path ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
+          Save_result.construct_relative_path
+            ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
         )
         ?rna_bam_path:(
           Option.map rna_bam ~f:(fun b ->
-              Save_result.construct_relative_path ~work_dir:Config.work_dir (get_bam b)#product#path
+              Save_result.construct_relative_path
+                ~work_dir:Config.work_dir (get_bam b)#product#path
             )
         )
         ~vcfs:(List.map vcfs ~f:(fun (name, vcf) ->
             Biokepi.Tools.Igvxml.vcf ~name
-              ~path:(Save_result.construct_relative_path ~work_dir:Config.work_dir (get_vcf vcf)#product#path)))
+              ~path:(Save_result.construct_relative_path
+                       ~work_dir:Config.work_dir (get_vcf vcf)#product#path)))
         ~output_path:(Config.saving_path // sprintf "local-igv-%s.xml" run_name)
         ()
     in

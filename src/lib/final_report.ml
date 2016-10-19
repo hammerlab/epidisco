@@ -371,7 +371,7 @@ module To_workflow
       let potential_items =
         [
           "Normal-bam", Some ((get_bam normal_bam)#product#path);
-          "Tumor-bam", Some ((get_bam normal_bam)#product#path);
+          "Tumor-bam", Some ((get_bam tumor_bam)#product#path);
           "RNA-bam",
           Option.map rna_bam ~f:(fun b ->
               (get_bam b)#product#path);

@@ -115,7 +115,7 @@ let pipeline_term
       )
     )
   in
-  let info = Term.(info "pipeline" ~doc:"The Biokepi Pipeline") in
+  let info = Term.(info "pipeline" ~doc:"The Epidisco Pipeline") in
   let parse_input_file file ~kind =
     match Filename.check_suffix file ".bam" with
     | true ->
@@ -306,10 +306,11 @@ let main
     pipeline_term ~biokepi_machine ?work_directory () in
   let open Cmdliner in
   let default_cmd =
-    let doc = "Run the Protoepidisco pipeline on them" in
+    let doc = "Run the Epidisco pipeline." in
     let man = [
       `S "AUTHORS";
       `P "Sebastien Mondet <seb@mondet.org>"; `Noblank;
+      `P "Isaac Hodes <isaachodes@gmail.com>"; `Noblank;
       `S "BUGS";
       `P "Browse and report new issues at"; `Noblank;
       `P "<https://github.com/hammerlab/epidisco>.";

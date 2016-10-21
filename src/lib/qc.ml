@@ -161,44 +161,20 @@ module EDSL = struct
 
   module Extended_file_spec = struct
 
-    include Final_report.Extend_file_spec
+    include Biokepi.EDSL.Compile.To_workflow.File_type_specification
     open Biokepi.KEDSL
 
-    type _ t +=
-        Email: nothing workflow_node -> [ `Email ] t
+    type t +=
+        Email: nothing workflow_node -> t
 
-    let rec as_dependency_edges
-      : type a. a t -> workflow_edge list =
-      function
-      | Email wf -> [depends_on wf]
-      | List xs -> List.concat_map ~f:as_dependency_edges xs
-      | To_unit v -> as_dependency_edges v
-      | other ->
-        Final_report.Extend_file_spec.as_dependency_edges other
-
-    let rec to_string : type a. a t -> string =
-      function
-      | Email _ -> "Email"
-      | List l ->
-        sprintf "[%s]" (List.map l ~f:to_string |> String.concat ~sep:"; ")
-      | To_unit a -> sprintf "(to unit %s)" (to_string a)
-      | other -> Final_report.Extend_file_spec.to_string other
-
-    let fail_get other name =
-      ksprintf failwith "Error while extracting File_type_specification.t \
-                         (%s case, in %s), this usually means that the type \
-                         has been wrongly extended" (to_string other) name
-
-    let get_unit_workflow :
-      name: string ->
-      unit t ->
-      unknown_product workflow_node =
-      fun ~name f ->
-        match f with
-        | To_unit v ->
-          workflow_node without_product
-            ~name ~edges:(as_dependency_edges v)
-        | other -> fail_get other "get_unit_workflow"
+    let () =
+      add_to_string (function
+        | Email _ -> Some "QC-Email"
+        | other -> None);
+      add_to_dependencies_edges_function (function
+        | Email wf -> Some [depends_on wf]
+        | _ -> None);
+      ()
 
   end
 

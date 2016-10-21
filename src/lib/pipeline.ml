@@ -37,10 +37,8 @@ let star_config =
     In particular:
 
        STAR assigns good alignments a MAPQ of 255 (which technically means
-       “unknown” and is therefore meaningless to GATK). So we use the GATK’s
-       ReassignOneMappingQuality read filter to reassign all good alignments to the
-       default value of 60.
-    *)
+       “unknown” and is therefore meaningless to GATK). So we instead reassign
+       all good alignments to the default value of 60.  *)
     sam_mapq_unique = Some 60;
     overhang_length = None;
   }

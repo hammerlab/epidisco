@@ -58,7 +58,10 @@ let mutect_config_mouse =
   Biokepi.Tools.Mutect.Configuration.default_without_cosmic
 
 let mark_dups_config =
-  Biokepi.Tools.Picard.Mark_duplicates_settings.default
+  Biokepi.Tools.Picard.Mark_duplicates_settings.
+    { default with
+      name = "picard-with-heap";
+      mem_param = Some "30g" }
 
 
 module Parameters = struct

@@ -57,8 +57,11 @@ let mutect_config = Biokepi.Tools.Mutect.Configuration.default
 let mutect_config_mouse =
   Biokepi.Tools.Mutect.Configuration.default_without_cosmic
 
-let mark_dups_config =
-  Biokepi.Tools.Picard.Mark_duplicates_settings.default
+let mark_dups_config heap =
+  Biokepi.Tools.Picard.Mark_duplicates_settings.
+    { default with
+      name = "picard-with-heap";
+      mem_param = heap }
 
 
 module Parameters = struct
@@ -79,6 +82,7 @@ module Parameters = struct
     normal: Biokepi.EDSL.Library.Input.t;
     tumor: Biokepi.EDSL.Library.Input.t;
     rna: Biokepi.EDSL.Library.Input.t option;
+    picard_java_max_heap: string option;
   } [@@deriving show,make]
 
   let construct_run_name params =
@@ -155,13 +159,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
-  let to_bam ~reference_build input =
+  let to_bam ~parameters ~reference_build input =
     let list_of_inputs = Stdlib.bwa_mem_opt_inputs input in
     List.map list_of_inputs ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
     |> Bfx.list
     |> Bfx.merge_bams
     |> Bfx.picard_mark_duplicates
-      ~configuration:mark_dups_config
+      ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
 
   let final_bams ~normal ~tumor =
     let pair =
@@ -208,21 +212,21 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let qc fqs =
     Bfx.concat fqs |> Bfx.fastqc
 
-  let rna_bam ~reference_build fqs =
+  let rna_bam ~parameters ~reference_build fqs =
     Bfx.list_map fqs
       ~f:(Bfx.lambda (fun fq ->
           Bfx.star ~configuration:star_config ~reference_build fq))
     |> Bfx.merge_bams
     |> Bfx.picard_mark_duplicates
-      ~configuration:mark_dups_config
+      ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
     |> Bfx.gatk_indel_realigner
       ~configuration:indel_realigner_config
 
   let hla fqs =
     Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save "Seq2HLA"
 
-  let rna_pipeline ~reference_build ~with_seq2hla fqs =
-    let bam = rna_bam ~reference_build fqs in
+  let rna_pipeline ~parameters ~reference_build ~with_seq2hla fqs =
+    let bam = rna_bam ~parameters ~reference_build fqs in
     (
       Some (bam |> Bfx.save "rna-bam"),
       Some (bam |> Bfx.stringtie |> Bfx.save "stringtie"),
@@ -238,9 +242,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let open Parameters in
     let rna = Option.map parameters.rna ~f:Stdlib.fastq_of_input in
     let normal_bam, tumor_bam =
+      let to_bam = to_bam ~reference_build:parameters.reference_build ~parameters in
       final_bams
-        ~normal:(parameters.normal |> to_bam ~reference_build:parameters.reference_build)
-        ~tumor:(parameters.tumor |> to_bam ~reference_build:parameters.reference_build)
+        ~normal:(parameters.normal |> to_bam)
+        ~tumor:(parameters.tumor |> to_bam)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
     in
     let normal_bam_flagstat, tumor_bam_flagstat =
@@ -266,7 +271,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | None -> None, None, None, None
       | Some r ->
         rna_pipeline r ~reference_build:parameters.reference_build
-          ~with_seq2hla:parameters.with_seq2hla
+          ~parameters ~with_seq2hla:parameters.with_seq2hla
     in
     let maybe_annotated =
       match parameters.reference_build with

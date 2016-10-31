@@ -75,6 +75,9 @@ module Parameters = struct
     with_mutect2: bool [@default false];
     with_varscan: bool [@default false];
     with_somaticsniper: bool [@default false];
+    with_optitype_normal: bool [@default false];
+    with_optitype_tumor: bool [@default false];
+    with_optitype_rna: bool [@default false];
     email_options: Qc.EDSL.email_options option;
     bedfile: string option [@default None];
     experiment_name: string [@main];
@@ -225,16 +228,21 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let hla fqs =
     Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save "Seq2HLA"
 
-  let rna_pipeline ~parameters ~reference_build ~with_seq2hla fqs =
+  let optitype_hla fqs ftype name =
+    Bfx.optitype ftype (Bfx.concat fqs) |> Bfx.save ("OptiType-" ^ name)
+
+  let rna_pipeline ~parameters ~reference_build ~with_seq2hla ~with_optitype_rna fqs =
     let bam = rna_bam ~parameters ~reference_build fqs in
     (
       Some (bam |> Bfx.save "rna-bam"),
       Some (bam |> Bfx.stringtie |> Bfx.save "stringtie"),
       (* Seq2HLA does not work on mice: *)
-      (match reference_build, with_seq2hla with
-      | "mm10", _ -> None
-      | _, false -> None
-      | _, true -> Some (hla fqs)),
+      (match reference_build, with_seq2hla, with_optitype_rna with
+      | "mm10", _, _ -> (None, None)
+      | _, false, false -> (None, None)
+      | _, false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
+      | _, true, false -> (Some (hla fqs), None)
+      | _, true, true -> (Some (hla fqs), Some (optitype_hla fqs `RNA "RNA"))),
       Some (bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat")
     )
 
@@ -266,12 +274,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let somatic_vcfs =
       List.filter ~f:(fun (_, somatic, _) -> somatic) vcfs
       |> List.map ~f:(fun (_, _, v) -> v) in
-    let rna_bam, stringtie, seq2hla, rna_bam_flagstat =
+    let rna_bam, stringtie, (seq2hla, optitype_rna), rna_bam_flagstat =
       match rna with
-      | None -> None, None, None, None
+      | None -> None, None, (None, None), None
       | Some r ->
         rna_pipeline r ~reference_build:parameters.reference_build
           ~parameters ~with_seq2hla:parameters.with_seq2hla
+          ~with_optitype_rna:parameters.with_optitype_rna
     in
     let maybe_annotated =
       match parameters.reference_build with
@@ -282,12 +291,34 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | _ -> List.map vcfs ~f:(fun (name, somatic, v) ->
           name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
+    let normal = Stdlib.fastq_of_input parameters.normal in
+    let tumor = Stdlib.fastq_of_input parameters.tumor in
+    (* HLA priority list
+         - Manual HLAs
+         - Seq2HLA results
+         - OptiType on Normal DNA
+         - OptiType on Tumor DNA
+         - OptiType on Tumor RNA
+    *)
+    let optitype_normal, optitype_tumor =
+      let {with_optitype_normal; with_optitype_tumor; _} = parameters in
+      (if with_optitype_normal then (Some (optitype_hla normal `DNA "Normal")) else None),
+      (if with_optitype_tumor then (Some (optitype_hla tumor `DNA "Tumor")) else None)
+    in
+    let optitype_hla =
+      begin match optitype_normal, optitype_tumor, optitype_rna with
+      | Some n, _, _ -> Some n
+      | None, Some t, _ -> Some t
+      | None, None, Some r -> Some r
+      | None, None, None -> None 
+      end
+    in
     let mhc_alleles =
-      begin match parameters.mhc_alleles, seq2hla with
-      | Some alleles, _ -> Some (Bfx.mhc_alleles (`Names alleles))
-      | None, Some s ->
-        Some (Bfx.hlarp (`Seq2hla s))
-      | None, None -> None
+      begin match parameters.mhc_alleles, seq2hla, optitype_hla with
+      | Some alleles, _, _ -> Some (Bfx.mhc_alleles (`Names alleles))
+      | None, Some s, _ -> Some (Bfx.hlarp (`Seq2hla s))
+      | None, None, Some s -> Some (Bfx.hlarp (`Optitype s))
+      | None, None, None -> None
       end
     in
     let vaxrank =
@@ -305,8 +336,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           alleles
         |> Bfx.save "Vaxrank"
       ) in
-    let normal = Stdlib.fastq_of_input parameters.normal in
-    let tumor = Stdlib.fastq_of_input parameters.tumor in
     let fastqc_normal = qc normal |> Bfx.save "QC:normal" in
     let fastqc_tumor = qc tumor |> Bfx.save "QC:tumor" in
     let fastqc_rna =
@@ -334,6 +363,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         ~fastqc_normal ~fastqc_tumor ?fastqc_rna
         ~normal_bam ~tumor_bam ?rna_bam
         ~normal_bam_flagstat ~tumor_bam_flagstat
+        ?optitype_normal ?optitype_tumor ?optitype_rna
         ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
         ~metadata:(Parameters.metadata parameters) in
     let observables =

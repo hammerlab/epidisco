@@ -80,6 +80,9 @@ module Apply_functions (B : Semantics) = struct
       ~normal_bam_flagstat
       ~tumor_bam
       ~tumor_bam_flagstat
+      ?optitype_normal
+      ?optitype_tumor
+      ?optitype_rna
       ?rna_bam
       ?vaxrank
       ?rna_bam_flagstat
@@ -100,6 +103,9 @@ module Apply_functions (B : Semantics) = struct
            ~normal_bam_flagstat:(bwd normal_bam_flagstat)
            ~tumor_bam:(bwd tumor_bam)
            ~tumor_bam_flagstat:(bwd tumor_bam_flagstat)
+           ?optitype_normal:(Option.map optitype_normal bwd)
+           ?optitype_tumor:(Option.map optitype_tumor bwd)
+           ?optitype_rna:(Option.map optitype_rna bwd)
            ?rna_bam:(Option.map rna_bam bwd)
            ?vaxrank:(Option.map vaxrank bwd)
            ?rna_bam_flagstat:(Option.map rna_bam_flagstat bwd)

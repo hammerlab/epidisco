@@ -33,6 +33,9 @@ module type Semantics = sig
     normal_bam_flagstat: [ `Flagstat ] repr ->
     tumor_bam: [ `Bam ] repr ->
     tumor_bam_flagstat: [ `Flagstat ] repr ->
+    ?optitype_normal: [ `Optitype_result ] repr ->
+    ?optitype_tumor: [ `Optitype_result ] repr ->
+    ?optitype_rna: [ `Optitype_result ] repr ->
     ?rna_bam: [ `Bam ] repr ->
     ?vaxrank: [ `Vaxrank ] repr ->
     ?rna_bam_flagstat: [ `Flagstat ] repr ->
@@ -59,6 +62,9 @@ module To_json = struct
       ~normal_bam_flagstat
       ~tumor_bam
       ~tumor_bam_flagstat
+      ?optitype_normal
+      ?optitype_tumor
+      ?optitype_rna
       ?rna_bam
       ?vaxrank
       ?rna_bam_flagstat
@@ -86,6 +92,9 @@ module To_json = struct
           "normal-bam-flagstat", normal_bam_flagstat ~var_count;
           "tumor-bam-flagstat", tumor_bam_flagstat ~var_count;
         ]
+        @ opt "optitype-normal" optitype_normal
+        @ opt "optitype-tumor" optitype_tumor
+        @ opt "optitype-rna" optitype_rna
         @ opt "rna-bam" rna_bam
         @ opt "rna-fastqc" fastqc_rna
         @ opt "rna-bam-flagstat" rna_bam_flagstat
@@ -131,6 +140,9 @@ module To_dot = struct
       ~normal_bam_flagstat
       ~tumor_bam
       ~tumor_bam_flagstat
+      ?optitype_normal
+      ?optitype_tumor
+      ?optitype_rna
       ?rna_bam
       ?vaxrank
       ?rna_bam_flagstat
@@ -156,6 +168,9 @@ module To_dot = struct
           "normal-bam-flagstat", normal_bam_flagstat ~var_count;
           "tumor-bam-flagstat", tumor_bam_flagstat ~var_count;
         ]
+        @ opt "optitype-normal" optitype_normal
+        @ opt "optitype-tumor" optitype_tumor
+        @ opt "optitype-rna" optitype_rna
         @ opt "rna-bam" rna_bam
         @ opt "rna-fastqc" fastqc_rna
         @ opt "rna-bam-flagstat" rna_bam_flagstat
@@ -251,6 +266,9 @@ module To_workflow
       ~normal_bam_flagstat
       ~tumor_bam
       ~tumor_bam_flagstat
+      ?optitype_normal
+      ?optitype_tumor
+      ?optitype_rna
       ?rna_bam
       ?vaxrank
       ?rna_bam_flagstat
@@ -307,6 +325,9 @@ module To_workflow
           get_flagstat_result tumor_bam_flagstat |> depends_on;
           get_flagstat_result normal_bam_flagstat |> depends_on;
         ]
+        @ opt optitype_normal get_optitype_result
+        @ opt optitype_tumor get_optitype_result
+        @ opt optitype_rna get_optitype_result
         @ opt rna_bam get_bam
         @ opt fastqc_rna get_fastqc_result
         @ opt vaxrank get_vaxrank_result
@@ -383,6 +404,15 @@ module To_workflow
             let title = sprintf "VCF: %s" name in
             title, Some wf#product#path)
         @ [
+          "OptiType-Normal",
+          Option.map optitype_normal ~f:(fun i ->
+              (get_optitype_result i)#product#path);
+          "OptiType-Tumor",
+          Option.map optitype_tumor ~f:(fun i ->
+              (get_optitype_result i)#product#path);
+          "OptiType-RNA",
+          Option.map optitype_rna ~f:(fun i ->
+              (get_optitype_result i)#product#path);
           "Vaxrank",
           Option.map vaxrank ~f:(fun i ->
               (get_vaxrank_result i)#product#text_report_path);

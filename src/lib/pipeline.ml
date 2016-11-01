@@ -225,7 +225,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     |> Bfx.gatk_indel_realigner
       ~configuration:indel_realigner_config
 
-  let hla fqs =
+  let seq2hla_hla fqs =
     Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save "Seq2HLA"
 
   let optitype_hla fqs ftype name =
@@ -241,8 +241,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | "mm10", _, _ -> (None, None)
       | _, false, false -> (None, None)
       | _, false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
-      | _, true, false -> (Some (hla fqs), None)
-      | _, true, true -> (Some (hla fqs), Some (optitype_hla fqs `RNA "RNA"))),
+      | _, true, false -> (Some (seq2hla_hla fqs), None)
+      | _, true, true -> (Some (seq2hla_hla fqs), Some (optitype_hla fqs `RNA "RNA"))),
       Some (bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat")
     )
 

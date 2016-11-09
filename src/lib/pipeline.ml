@@ -86,6 +86,7 @@ module Parameters = struct
     tumor: Biokepi.EDSL.Library.Input.t;
     rna: Biokepi.EDSL.Library.Input.t option;
     picard_java_max_heap: string option;
+    igv_url_server_prefix: string option;
   } [@@deriving show,make]
 
   let construct_run_name params =
@@ -359,6 +360,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let report =
       Bfx.report
         (Parameters.construct_run_name parameters)
+        ?igv_url_server_prefix:parameters.igv_url_server_prefix
         ~vcfs:maybe_annotated ?bedfile
         ~fastqc_normal ~fastqc_tumor ?fastqc_rna
         ~normal_bam ~tumor_bam ?rna_bam

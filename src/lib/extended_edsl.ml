@@ -72,6 +72,7 @@ module Apply_functions (B : Semantics) = struct
     fwd email
 
   let report
+      ?igv_url_server_prefix
       ~vcfs
       ~fastqc_normal
       ~fastqc_tumor
@@ -114,5 +115,6 @@ module Apply_functions (B : Semantics) = struct
            ?seq2hla:(Option.map seq2hla bwd)
            ?stringtie:(Option.map stringtie bwd)
            ?bedfile
+           ?igv_url_server_prefix
            ~metadata)
 end

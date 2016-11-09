@@ -25,6 +25,7 @@ module type Semantics = sig
 
   type 'a repr
   val report :
+    ?igv_url_server_prefix: string ->
     vcfs:(string * [ `Vcf ] repr) list ->
     fastqc_normal: [ `Fastqc ] repr ->
     fastqc_tumor: [ `Fastqc ] repr ->
@@ -54,6 +55,7 @@ module To_json = struct
   (* type 'a repr = 'a Biokepi.EDSL.Compile.To_json.repr *)
 
   let report
+      ?igv_url_server_prefix
       ~vcfs
       ~fastqc_normal
       ~fastqc_tumor
@@ -106,6 +108,9 @@ module To_json = struct
         @ Option.value_map
           ~default:[]
           bedfile ~f:(fun f -> ["bedfile", `String f])
+        @ Option.value_map ~default:[]
+          igv_url_server_prefix
+          ~f:(fun u -> ["Hosted at ~igv_url_server_prefix", `String u])
       in
       let json : Yojson.Basic.json =
         `Assoc [
@@ -132,6 +137,7 @@ module To_dot = struct
   let string s = Tree.string s
 
   let report
+      ?igv_url_server_prefix
       ~vcfs
       ~fastqc_normal
       ~fastqc_tumor
@@ -258,6 +264,7 @@ module To_workflow
     Program.(make_png && append_dirty_to piece_of_website ~file:html_file)
 
   let report
+      ?igv_url_server_prefix
       ~vcfs
       ~fastqc_normal
       ~fastqc_tumor
@@ -283,30 +290,40 @@ module To_workflow
     let host = Biokepi.Machine.as_host Config.machine in
     let product =
       (single_file ~host (Config.saving_path // sprintf "index.html")) in
+    let opt_prefix p =
+      match igv_url_server_prefix with
+      | None -> p
+      | Some prefix -> prefix ^ p
+    in
     let igv_dot_xml =
-      Biokepi.Tools.Igvxml.run
-        ~run_with:Config.machine
+      let normal_bam_path =
+        Save_result.construct_relative_path
+          ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
+        |> opt_prefix in
+      let tumor_bam_path =
+        Save_result.construct_relative_path
+          ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
+        |> opt_prefix in
+      let rna_bam_path =
+        Option.map rna_bam ~f:(fun b ->
+            Save_result.construct_relative_path
+              ~work_dir:Config.work_dir (get_bam b)#product#path
+            |> opt_prefix) in
+      let vcfs =
+        List.map vcfs ~f:(fun (name, vcf) ->
+          Biokepi.Tools.Igvxml.vcf ~name
+            ~path:(Save_result.construct_relative_path
+                     ~work_dir:Config.work_dir (get_vcf vcf)#product#path
+                   |> opt_prefix))
+      in
+      Biokepi.Tools.Igvxml.run ~run_with:Config.machine
+        ~output_path:(Config.saving_path // sprintf "local-igv-%s.xml" run_name)
         ~reference_genome:(get_bam normal_bam)#product#reference_build
         ~run_id:run_name
-        ~normal_bam_path:(
-          Save_result.construct_relative_path
-            ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
-        )
-        ~tumor_bam_path:(
-          Save_result.construct_relative_path
-            ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
-        )
-        ?rna_bam_path:(
-          Option.map rna_bam ~f:(fun b ->
-              Save_result.construct_relative_path
-                ~work_dir:Config.work_dir (get_bam b)#product#path
-            )
-        )
-        ~vcfs:(List.map vcfs ~f:(fun (name, vcf) ->
-            Biokepi.Tools.Igvxml.vcf ~name
-              ~path:(Save_result.construct_relative_path
-                       ~work_dir:Config.work_dir (get_vcf vcf)#product#path)))
-        ~output_path:(Config.saving_path // sprintf "local-igv-%s.xml" run_name)
+        ~normal_bam_path
+        ~tumor_bam_path
+        ?rna_bam_path
+        ~vcfs
         ()
     in
     let edges =

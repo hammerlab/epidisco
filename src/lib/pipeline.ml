@@ -161,6 +161,7 @@ end
 
 module Full (Bfx: Extended_edsl.Semantics) = struct
 
+  open Option
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
   let to_bam ~parameters ~reference_build input =
@@ -232,20 +233,26 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let optitype_hla fqs ftype name =
     Bfx.optitype ftype (Bfx.concat fqs) |> Bfx.save ("OptiType-" ^ name)
 
+  type rna_results =
+    { rna_bam: [ `Bam ] Bfx.repr;
+      stringtie: [ `Gtf ] Bfx.repr;
+      seq2hla: [ `Seq2hla_result ] Bfx.repr option;
+      optitype_rna: [ `Optitype_result ] Bfx.repr option;
+      rna_bam_flagstat: [ `Flagstat ] Bfx.repr }
   let rna_pipeline ~parameters ~reference_build ~with_seq2hla ~with_optitype_rna fqs =
     let bam = rna_bam ~parameters ~reference_build fqs in
-    (
-      Some (bam |> Bfx.save "rna-bam"),
-      Some (bam |> Bfx.stringtie |> Bfx.save "stringtie"),
-      (* Seq2HLA does not work on mice: *)
+    (* Seq2HLA does not work on mice: *)
+    let seq2hla, optitype_rna =
       (match reference_build, with_seq2hla, with_optitype_rna with
-      | "mm10", _, _ -> (None, None)
-      | _, false, false -> (None, None)
-      | _, false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
-      | _, true, false -> (Some (seq2hla_hla fqs), None)
-      | _, true, true -> (Some (seq2hla_hla fqs), Some (optitype_hla fqs `RNA "RNA"))),
-      Some (bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat")
-    )
+     | "mm10", _, _ -> (None, None)
+     | _, false, false -> (None, None)
+     | _, false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
+     | _, true, false -> (Some (seq2hla_hla fqs), None)
+     | _, true, true -> (Some (seq2hla_hla fqs), Some (optitype_hla fqs `RNA "RNA"))) in
+    { rna_bam = bam |> Bfx.save "rna-bam";
+      stringtie = bam |> Bfx.stringtie |> Bfx.save "stringtie";
+      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";
+      seq2hla; optitype_rna; }
 
   let run parameters =
     let open Parameters in
@@ -275,13 +282,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let somatic_vcfs =
       List.filter ~f:(fun (_, somatic, _) -> somatic) vcfs
       |> List.map ~f:(fun (_, _, v) -> v) in
-    let rna_bam, stringtie, (seq2hla, optitype_rna), rna_bam_flagstat =
+    let rna_results =
       match rna with
-      | None -> None, None, (None, None), None
+      | None -> None
       | Some r ->
-        rna_pipeline r ~reference_build:parameters.reference_build
-          ~parameters ~with_seq2hla:parameters.with_seq2hla
-          ~with_optitype_rna:parameters.with_optitype_rna
+        Some (rna_pipeline r ~reference_build:parameters.reference_build
+                ~parameters ~with_seq2hla:parameters.with_seq2hla
+                ~with_optitype_rna:parameters.with_optitype_rna)
     in
     let maybe_annotated =
       match parameters.reference_build with
@@ -307,14 +314,16 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       (if with_optitype_tumor then (Some (optitype_hla tumor `DNA "Tumor")) else None)
     in
     let optitype_hla =
+      let optitype_rna = rna_results >>= fun {optitype_rna; _} -> optitype_rna in
       begin match optitype_normal, optitype_tumor, optitype_rna with
       | Some n, _, _ -> Some n
       | None, Some t, _ -> Some t
       | None, None, Some r -> Some r
-      | None, None, None -> None 
+      | None, None, None -> None
       end
     in
     let mhc_alleles =
+      let seq2hla = rna_results >>= fun {seq2hla; _} -> seq2hla in
       begin match parameters.mhc_alleles, seq2hla, optitype_hla with
       | Some alleles, _, _ -> Some (Bfx.mhc_alleles (`Names alleles))
       | None, Some s, _ -> Some (Bfx.hlarp (`Seq2hla s))
@@ -323,16 +332,15 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       end
     in
     let vaxrank =
-      let open Option in
-      rna_bam
-      >>= fun bam ->
+      rna_results
+      >>= fun {rna_bam; _} ->
       mhc_alleles
       >>= fun alleles ->
       return (
         Bfx.vaxrank
           ~configuration:vaxrank_config
           somatic_vcfs
-          bam
+          rna_bam
           `NetMHCcons
           alleles
         |> Bfx.save "Vaxrank"
@@ -344,6 +352,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | None -> None
       | Some rna -> Some (Bfx.save "QC:rna" (qc rna)) in
     let emails =
+      let rna_bam_flagstat =
+        rna_results >>= fun {rna_bam_flagstat; _} -> return rna_bam_flagstat in
       match parameters.email_options with
       | None -> None
       | Some email_options ->
@@ -358,6 +368,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
             ?rna:fastqc_rna email_options in
         Some [flagstat_email; fastqc_email] in
     let report =
+      let rna_bam, optitype_rna, stringtie, seq2hla, rna_bam_flagstat =
+        match rna_results with
+        | None -> None, None, None, None, None
+        | Some {rna_bam; optitype_rna; stringtie; seq2hla; rna_bam_flagstat} ->
+          Some rna_bam, optitype_rna, Some stringtie,
+          seq2hla, Some rna_bam_flagstat
+      in
       Bfx.report
         (Parameters.construct_run_name parameters)
         ?igv_url_server_prefix:parameters.igv_url_server_prefix

@@ -291,9 +291,16 @@ module To_workflow
     let product =
       (single_file ~host (Config.saving_path // sprintf "index.html")) in
     let opt_prefix p =
-      match igv_url_server_prefix with
+      let open Option in
+      (* Want to make sure we don't end up with a url like http://example.com/./something *)
+      let p = try String.chop_prefix_exn p ~prefix:"./" with _ -> p in
+      let prefix = igv_url_server_prefix >>= fun p ->
+        match String.chop_suffix ~suffix:"/" p with
+        | None -> return p
+        | a -> a in
+      match prefix with
       | None -> p
-      | Some prefix -> prefix ^ p
+      | Some prefix -> Filename.concat prefix p
     in
     let igv_dot_xml =
       let normal_bam_path =

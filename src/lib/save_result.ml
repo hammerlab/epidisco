@@ -203,7 +203,7 @@ module To_workflow
       ]
     | Optitype_result wf ->
       Mem.add_to_save key [
-        saved wf#product#path wf;
+        saved ~is_directory:true wf#product#path wf;
       ]
     | Vaxrank_result wf ->
       Mem.add_to_save key [

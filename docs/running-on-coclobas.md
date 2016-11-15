@@ -81,6 +81,18 @@ sudo bash ./disco.sh enter-docker
 ```shell
 cd /coclo
 ./disco.sh create-nfs 10000  # size in GB
+```
+
+If the initial NFS size proves insufficient as you run many workflows,
+you can add extra storage capacity to your NFS server via:
+
+```shell
+./disco.sh extend-nfs 5000  # size in GB
+```
+
+Next, we want to start all the services and mount the storage space:
+
+```shell
 ./disco.sh start-all
 ```
 

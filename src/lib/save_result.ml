@@ -2,6 +2,7 @@
 open Nonstd
 module String = Sosa.Native_string
 let (//) = Filename.concat
+module Name_file = Biokepi_run_environment.Common.Name_file
 
 module type Semantics = sig
 
@@ -28,7 +29,7 @@ let construct_relative_path ~work_dir original_path =
     ksprintf failwith "ERROR: %s is not a prefix of %s"
       work_dir original_path
 
-let json_dump_path path = path ^ ".json"
+let json_dump_path path = Name_file.from_path ".json" path []
 
 let make_saving_node
     ~saving_path ~json_pipeline ~key ~run_with ~work_dir

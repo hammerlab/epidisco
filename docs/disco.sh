@@ -196,19 +196,23 @@ create-nfs () {
     touch /nfs-pool/.witness.txt
 }
 
-extend-nfs () {
+add-disk-to-nfs () {
     source /coclo/configuration.env
 
     local size=$1
     local project=$(get-project-name)
-    local new_disk_id=$NFS_SERVER_NAME-$RANDOM
+    local new_disk_id=$2
+    if [ "$new_disk_id" = "" ]
+    then
+        new_disk_id=$NFS_SERVER_NAME-$RANDOM
+    fi
 
     # Create an additional disk
     gcloud compute disks create $new_disk_id \
             --zone $GCLOUD_ZONE --project $project \
             --size $size --type "pd-standard"
 
-    # # Attach it pseudo-physically to the main NFS VM
+    # Attach it pseudo-physically to the main NFS VM
     gcloud compute instances attach-disk $NFS_SERVER_NAME \
             --disk $new_disk_id --device-name $new_disk_id \
             --zone $GCLOUD_ZONE

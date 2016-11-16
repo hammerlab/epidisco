@@ -87,7 +87,11 @@ If the initial NFS size proves insufficient as you run many workflows,
 you can add extra storage capacity to your NFS server via:
 
 ```shell
-./disco.sh extend-nfs 5000  # size in GB
+# Default size in GB; new disk name will be $NFS_SEVER_NAME-$RANDOM
+./disco.sh add-disk-to-nfs 5000  # size in GB
+
+# or explicitly name your new disk via:
+./disco.sh add-disk-to-nfs 5000 name-for-my-new-disk
 ```
 
 Next, we want to start all the services and mount the storage space:

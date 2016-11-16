@@ -174,10 +174,15 @@ install-epidisco () {
     opam pin add --yes epidisco "https://github.com/hammerlab/epidisco.git"
 }
 
+get-project-name () {
+    local project=$(curl "http://metadata.google.internal/computeMetadata/v1/project/project-id" \
+            -H "Metadata-Flavor: Google" 2>/dev/null)
+    echo $project
+}
+
 create-nfs () {
     local size=$1
-    local project=$(curl "http://metadata.google.internal/computeMetadata/v1/project/project-id" \
-                         -H "Metadata-Flavor: Google" 2>/dev/null)
+    local project=$(get-project-name)
     source /coclo/configuration.env
     # This utility (https://github.com/cioc/gcloudnfs) is pre-installed on the
     # Docker image.
@@ -189,6 +194,32 @@ create-nfs () {
     sudo mkdir -p /nfs-pool
     sudo mount -t nfs $NFS_SERVER_NAME:/nfs-pool /nfs-pool
     touch /nfs-pool/.witness.txt
+}
+
+add-disk-to-nfs () {
+    source /coclo/configuration.env
+
+    local size=$1
+    local project=$(get-project-name)
+    local new_disk_id=$2
+    if [ "$new_disk_id" = "" ]
+    then
+        new_disk_id=$NFS_SERVER_NAME-$RANDOM
+    fi
+
+    # Create an additional disk
+    gcloud compute disks create $new_disk_id \
+            --zone $GCLOUD_ZONE --project $project \
+            --size $size --type "pd-standard"
+
+    # Attach it pseudo-physically to the main NFS VM
+    gcloud compute instances attach-disk $NFS_SERVER_NAME \
+            --disk $new_disk_id --device-name $new_disk_id \
+            --zone $GCLOUD_ZONE
+
+    # Add this new disk to the ZFS POOL to expand the pool
+    gcloud compute ssh --zone $GCLOUD_ZONE $NFS_SERVER_NAME \
+            -- sudo zpool add -f nfs-pool /dev/disk/by-id/google-$new_disk_id
 }
 
 fill-up-cache () {

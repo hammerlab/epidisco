@@ -55,7 +55,7 @@ let make_saving_node
             (Filename.quote path)
             (Filename.quote copied_path);
           optional gzip [
-            shf "gzip --keep %s" (Filename.quote copied_path);
+            shf "gzip --force --keep %s" (Filename.quote copied_path);
           ];
           shf "echo %s > %s"
             (Yojson.Basic.pretty_to_string json |> Filename.quote)

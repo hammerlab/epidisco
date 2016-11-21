@@ -46,7 +46,7 @@ create () {
     gcloud compute firewall-rules create https-on-$boxname --allow tcp:443 \
            --source-tags=$boxname --source-ranges 0.0.0.0/0
     # Next we copy this script onto the newly-created box, so we can use it there
-    gcloud compute copy-files $script $boxname:~
+    gcloud compute copy-files $script $boxname:~ --zone $GCLOUD_ZONE
 }
 
 get-external-ip () {

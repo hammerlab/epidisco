@@ -102,18 +102,21 @@ let run_pipeline
 
 
 let pipeline ~biokepi_machine ?work_directory =
-  let parse_input_file file ~kind =
-    match Filename.check_suffix file ".bam" with
-    | true ->
-      Biokepi.EDSL.Library.Input.(
-        fastq_sample
-          ~sample_name:(kind ^ "-" ^
-                        (Filename.chop_extension file |> Filename.basename))
-          [of_bam ~reference_build:"dontcare" `PE file]
-      )
-    | false ->
-      Yojson.Safe.from_file file
-      |> Biokepi.EDSL.Library.Input.of_yojson |> or_fail (kind ^ "-json") in
+  let parse_input_files files ~kind =
+    let parse_file file prefix =
+      match Filename.check_suffix file ".bam" with
+      | true ->
+        Biokepi.EDSL.Library.Input.(
+          fastq_sample
+            ~sample_name:(prefix ^ "-" ^
+                          (Filename.chop_extension file |> Filename.basename))
+            [of_bam ~reference_build:"dontcare" `PE file]
+        )
+      | false ->
+        Yojson.Safe.from_file file
+        |> Biokepi.EDSL.Library.Input.of_yojson |> or_fail (prefix ^ "-json") in
+    List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
+  in
   fun
     (`Dry_run dry_run)
     (`Mouse_run mouse_run)
@@ -125,9 +128,9 @@ let pipeline ~biokepi_machine ?work_directory =
     (`With_varscan with_varscan)
     (`With_somaticsniper with_somaticsniper)
     (`Bedfile bedfile)
-    (`Normal_json normal_json_file)
-    (`Tumor_json tumor_json_file)
-    (`Rna_json rna_json_file)
+    (`Normal_json normal_json_files)
+    (`Tumor_json tumor_json_files)
+    (`Rna_json rna_json_files)
     (`Ref reference_build)
     (`Results results_path)
     (`Output_dot output_dot_to_png)
@@ -140,16 +143,9 @@ let pipeline ~biokepi_machine ?work_directory =
     (`To_email to_email)
     (`Igv_url_server_prefix igv_url_server_prefix)
     ->
-      let normal = parse_input_file normal_json_file ~kind:"normal" in
-      let tumor = parse_input_file tumor_json_file ~kind:"tumor" in
-      let rna =
-        match rna_json_file with
-        | "" ->
-          eprintf "WARNING: No RNA provided\n%!";
-          None
-        | file ->
-          Some (parse_input_file file ~kind:"rna")
-      in
+      let normal_inputs = parse_input_files normal_json_files ~kind:"normal" in
+      let tumor_inputs = parse_input_files tumor_json_files ~kind:"tumor" in
+      let rna_inputs = parse_input_files rna_json_files ~kind:"rna" in
       let email_options =
         match
           to_email, from_email, mailgun_domain_name, mailgun_api_key with
@@ -166,7 +162,7 @@ let pipeline ~biokepi_machine ?work_directory =
       in
       let params =
         Pipeline.Parameters.make experiment_name
-          ~normal ~tumor ?rna
+          ~normal_inputs ~tumor_inputs ~rna_inputs
           ~bedfile
           ~mouse_run
           ~reference_build
@@ -190,15 +186,15 @@ let pipeline ~biokepi_machine ?work_directory =
 let args pipeline =
   let open Cmdliner in
   let open Cmdliner.Term in
-  let json_file_arg ?(req = true) option_name f =
-    let doc = sprintf "JSON file describing the %S sample" option_name in
+  let json_files_arg ?(req = true) option_name f =
+    let doc = sprintf "JSON file(s) describing the %S sample(s)" option_name in
     let inf = Arg.info [option_name] ~doc ~docv:"PATH" in
     pure f
     $
     Arg.(
       (if req
-       then required & opt (some string) None & inf
-       else value & opt string "" & inf))
+       then required & opt (some (list string)) None & inf
+       else value & opt (list string) [] & inf))
   in
   let tool_option f name =
     pure f
@@ -234,9 +230,9 @@ let args pipeline =
   $ tool_option (fun e -> `With_varscan e) "varscan"
   $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
   $ bed_file_opt
-  $ json_file_arg "normal" (fun s -> `Normal_json s)
-  $ json_file_arg "tumor" (fun s -> `Tumor_json s)
-  $ json_file_arg ~req:false "rna" (fun s -> `Rna_json s)
+  $ json_files_arg "normal" (fun s -> `Normal_json s)
+  $ json_files_arg "tumor" (fun s -> `Tumor_json s)
+  $ json_files_arg ~req:false "rna" (fun s -> `Rna_json s)
   $ begin
     pure (fun s -> `Ref s)
     $ Arg.(

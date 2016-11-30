@@ -46,6 +46,7 @@ opam update
 # Cf. https://github.com/mirleft/ocaml-nocrypto/issues/104
 opam pin add oasis 0.4.6
 
+opam pin add omake 0.9.8.6-0.rc1
 opam pin add ketrew https://github.com/hammerlab/ketrew.git#575d592f09d099725133e221a921324de998743f
 opam pin add biokepi https://github.com/hammerlab/biokepi.git
 

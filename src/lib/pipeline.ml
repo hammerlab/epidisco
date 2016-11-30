@@ -227,6 +227,12 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let qc fqs = Bfx.concat fqs |> Bfx.fastqc
 
+  (* Makes a list of samples (which are themselves fastqs or BAMs) into one (or
+     two, if paired-end) FASTQs. *)
+  let concat_samples samples =
+    Bfx.list_map
+      ~f:(Bfx.lambda (fun f -> Bfx.concat f))
+      (Bfx.list samples)
 
   let rna_bam ~parameters ~reference_build samples =
     let sample_to_bam sample =
@@ -261,10 +267,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let rna_pipeline
       ~parameters ~reference_build ~with_seq2hla ~with_optitype_rna samples =
     let bam = rna_bam ~parameters ~reference_build samples in
-    let fqs =
-      Bfx.list_map
-        ~f:(Bfx.lambda (fun f -> Bfx.concat f))
-        (Bfx.list samples) in
+    let fqs = concat_samples samples in
     (* Seq2HLA does not work on mice: *)
     let seq2hla, optitype_rna =
       (match reference_build, with_seq2hla, with_optitype_rna with
@@ -327,15 +330,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     (* Concat all the normal and tumor reads into one (or a pair of) FASTQ for
        use by seq2hla etc. *)
     let normal =
-      Bfx.list_map
-        ~f:(Bfx.lambda (fun f -> Bfx.concat f))
-        (Bfx.list (List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs))
-    in
+      concat_samples
+        (List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs) in
     let tumor =
-      Bfx.list_map
-        ~f:(Bfx.lambda (fun f -> Bfx.concat f))
-        (Bfx.list (List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs))
-    in
+      concat_samples
+        (List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs) in
     (* HLA priority list
          - Manual HLAs
          - Seq2HLA results

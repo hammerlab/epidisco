@@ -261,7 +261,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let rna_pipeline
       ~parameters ~reference_build ~with_seq2hla ~with_optitype_rna samples =
     let bam = rna_bam ~parameters ~reference_build samples in
-    let fqs = Bfx.concat (Bfx.list samples) in
+    let fqs =
+      Bfx.list_map
+        ~f:(Bfx.lambda (fun f -> Bfx.concat f))
+        (Bfx.list samples) in
     (* Seq2HLA does not work on mice: *)
     let seq2hla, optitype_rna =
       (match reference_build, with_seq2hla, with_optitype_rna with
@@ -321,12 +324,16 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | _ -> List.map vcfs ~f:(fun (name, somatic, v) ->
           name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
+    (* Concat all the normal and tumor reads into one (or a pair of) FASTQ for
+       use by seq2hla etc. *)
     let normal =
-      Bfx.concat
+      Bfx.list_map
+        ~f:(Bfx.lambda (fun f -> Bfx.concat f))
         (Bfx.list (List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs))
     in
     let tumor =
-      Bfx.concat
+      Bfx.list_map
+        ~f:(Bfx.lambda (fun f -> Bfx.concat f))
         (Bfx.list (List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs))
     in
     (* HLA priority list
@@ -378,7 +385,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let fastqc_rna =
       match rna with
       | None -> None
-      | Some rna -> Some (Bfx.save "QC:rna" (qc (Bfx.concat (Bfx.list rna)))) in
+      | Some rna ->
+        let rna =
+          Bfx.list_map ~f:(Bfx.lambda (fun f -> Bfx.concat f)) (Bfx.list rna) in
+        Some (Bfx.save "QC:rna" (qc rna)) in
     let emails =
       let rna_bam_flagstat =
         rna_results >>= fun {rna_bam_flagstat; _} -> return rna_bam_flagstat in

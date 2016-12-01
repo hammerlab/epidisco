@@ -169,7 +169,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
 
-  let to_bam ~parameters ~reference_build samples =
+  let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
       let list_of_inputs = Stdlib.bwa_mem_opt_inputs sample in
       List.map list_of_inputs ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
@@ -183,7 +183,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     |> Bfx.merge_bams
 
 
-  let final_bams ~normal ~tumor =
+  let process_dna_bam_pair ~normal ~tumor =
     let pair =
       Bfx.pair normal tumor
       |> Bfx.gatk_indel_realigner_joint
@@ -192,7 +192,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     Bfx.gatk_bqsr (Bfx.pair_first pair), Bfx.gatk_bqsr (Bfx.pair_second pair)
 
 
-  let vcfs
+  let vcf_pipeline
       ~mouse_run
       ?bedfile
       ~with_mutect2
@@ -234,7 +234,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ~f:(Bfx.lambda (fun f -> Bfx.concat f))
       (Bfx.list samples)
 
-  let rna_bam ~parameters ~reference_build samples =
+  let to_bam_rna ~parameters ~reference_build samples =
     let sample_to_bam sample =
       Bfx.list_map sample
         ~f:(Bfx.lambda (fun fq ->
@@ -242,12 +242,12 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       |> Bfx.merge_bams
       |> Bfx.picard_mark_duplicates
         ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
-      |> Bfx.gatk_indel_realigner
-        ~configuration:indel_realigner_config
     in
     List.map samples ~f:sample_to_bam
     |> Bfx.list
     |> Bfx.merge_bams
+    |> Bfx.gatk_indel_realigner
+      ~configuration:indel_realigner_config
 
 
   let seq2hla_hla fqs =
@@ -264,9 +264,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       seq2hla: [ `Seq2hla_result ] Bfx.repr option;
       optitype_rna: [ `Optitype_result ] Bfx.repr option;
       rna_bam_flagstat: [ `Flagstat ] Bfx.repr }
+
   let rna_pipeline
       ~parameters ~reference_build ~with_seq2hla ~with_optitype_rna samples =
-    let bam = rna_bam ~parameters ~reference_build samples in
+    let bam = to_bam_rna ~parameters ~reference_build samples in
     let fqs = concat_samples samples in
     (* Seq2HLA does not work on mice: *)
     let seq2hla, optitype_rna =
@@ -281,13 +282,15 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";
       seq2hla; optitype_rna; }
 
+
   let run parameters =
     let open Parameters in
     let rna =
       Option.map parameters.rna_inputs ~f:(List.map ~f:Stdlib.fastq_of_input) in
     let normal_bam, tumor_bam =
-      let to_bam = to_bam ~reference_build:parameters.reference_build ~parameters in
-      final_bams
+      let to_bam =
+        to_bam_dna ~reference_build:parameters.reference_build ~parameters in
+      process_dna_bam_pair
         ~normal:(parameters.normal_inputs |> to_bam)
         ~tumor:(parameters.tumor_inputs |> to_bam)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
@@ -299,7 +302,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let bedfile = parameters.bedfile in
     let vcfs =
       let {with_mutect2; with_varscan; with_somaticsniper; _} = parameters in
-      vcfs
+      vcf_pipeline
         ~mouse_run:parameters.mouse_run
         ?bedfile
         ~with_mutect2

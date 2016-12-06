@@ -165,7 +165,6 @@ end
 
 module Full (Bfx: Extended_edsl.Semantics) = struct
 
-  open Option
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
 
@@ -299,7 +298,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       ?rna_results ~parameters ~normal_bam_flagstat ~tumor_bam_flagstat ~fastqcs
     =
     let rna_bam_flagstat =
-      rna_results >>= fun {rna_bam_flagstat; _} -> return rna_bam_flagstat in
+      Option.map rna_results
+        ~f:(fun {rna_bam_flagstat; _} -> rna_bam_flagstat) in
     match parameters.Parameters.email_options with
     | None -> None
     | Some email_options ->
@@ -410,6 +410,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
       hla_pipeline ~parameters ~normal_samples ~tumor_samples ?rna_samples in
     let vaxrank =
+      let open Option in
       rna_results
       >>= fun {rna_bam; _} ->
       mhc_alleles

@@ -45,11 +45,23 @@ let star_config =
 
 let vaxrank_config =
   let open Biokepi.Tools.Vaxrank.Configuration in
-  { default with
-    name = "PGV-configuration";
-    padding_around_mutation = 5;
-    max_vaccine_peptides_per_mutation = 3;
-    max_mutations_in_report = 20; }
+  {name = "PGV-configuration";
+   vaccine_peptide_length = 25;
+   padding_around_mutation = 5;
+   max_vaccine_peptides_per_mutation = 3;
+   max_mutations_in_report = 20;
+   min_mapping_quality = 1;
+   min_variant_sequence_coverage = 1;
+   min_alt_rna_reads = 3;
+   use_duplicate_reads = false;
+   drop_secondary_alignments = false;
+   mhc_epitope_lengths = [8; 9; 10; 11];
+   reviewers = None;
+   final_reviewer = None;
+   xlsx_report = true;
+   pdf_report = true;
+   ascii_report = true;
+   parameters = []}
 
 let strelka_config = Biokepi.Tools.Strelka.Configuration.exome_default
 

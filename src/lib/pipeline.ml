@@ -165,7 +165,6 @@ end
 
 module Full (Bfx: Extended_edsl.Semantics) = struct
 
-  open Option
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
 
@@ -192,13 +191,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     Bfx.gatk_bqsr (Bfx.pair_first pair), Bfx.gatk_bqsr (Bfx.pair_second pair)
 
 
-  let vcf_pipeline
-      ~mouse_run
-      ?bedfile
-      ~with_mutect2
-      ~with_varscan
-      ~with_somaticsniper
-      ~reference_build ~normal ~tumor =
+  let vcf_pipeline ~parameters ?bedfile ~normal ~tumor =
+    let open Parameters in
+    let {with_mutect2; with_varscan; with_somaticsniper;
+           mouse_run; reference_build; _} = parameters in
     let opt_vcf test name somatic vcf =
       if test then [name, somatic, vcf ()] else []
     in
@@ -261,32 +257,125 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   type rna_results =
     { rna_bam: [ `Bam ] Bfx.repr;
       stringtie: [ `Gtf ] Bfx.repr;
-      seq2hla: [ `Seq2hla_result ] Bfx.repr option;
-      optitype_rna: [ `Optitype_result ] Bfx.repr option;
       rna_bam_flagstat: [ `Flagstat ] Bfx.repr }
 
   let rna_pipeline
-      ~parameters ~reference_build ~with_seq2hla ~with_optitype_rna samples =
+      ~parameters ~reference_build samples =
     let bam = to_bam_rna ~parameters ~reference_build samples in
-    let fqs = concat_samples samples in
     (* Seq2HLA does not work on mice: *)
-    let seq2hla, optitype_rna =
-      (match reference_build, with_seq2hla, with_optitype_rna with
-     | "mm10", _, _ -> (None, None)
-     | _, false, false -> (None, None)
-     | _, false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
-     | _, true, false -> (Some (seq2hla_hla fqs), None)
-     | _, true, true -> (Some (seq2hla_hla fqs), Some (optitype_hla fqs `RNA "RNA"))) in
     { rna_bam = bam |> Bfx.save "rna-bam";
       stringtie = bam |> Bfx.stringtie |> Bfx.save "stringtie";
-      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";
-      seq2hla; optitype_rna; }
+      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";}
 
+  type fastqc_results = {
+    normal_fastqcs: [ `Fastqc ] Bfx.repr list;
+    tumor_fastqcs: [ `Fastqc ] Bfx.repr list;
+    rna_fastqcs: [ `Fastqc ] Bfx.repr list option; }
+  let fastqc_pipeline ~normal_samples ~tumor_samples ?rna_samples () =
+    let normal_fastqcs =
+      List.mapi
+        ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:normal-%d" i))
+        normal_samples
+    in
+    let tumor_fastqcs =
+      List.mapi
+        ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:tumor-%d" i))
+        tumor_samples
+    in
+    let rna_fastqcs =
+      match rna_samples with
+      | None -> None
+      | Some rna_samples ->
+        Some
+          (List.mapi
+             ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:rna-%d" i))
+             rna_samples)
+    in
+    { normal_fastqcs; tumor_fastqcs; rna_fastqcs }
+
+
+  let email_pipeline
+      ?rna_results ~parameters ~normal_bam_flagstat ~tumor_bam_flagstat ~fastqcs
+    =
+    let rna_bam_flagstat =
+      Option.map rna_results
+        ~f:(fun {rna_bam_flagstat; _} -> rna_bam_flagstat) in
+    match parameters.Parameters.email_options with
+    | None -> None
+    | Some email_options ->
+      let flagstat_email =
+        Bfx.flagstat_email
+          ~normal:normal_bam_flagstat ~tumor:tumor_bam_flagstat
+          ?rna:rna_bam_flagstat email_options
+      in
+      let fastqc_email =
+        Bfx.fastqc_email ~fastqcs email_options in
+      Some [flagstat_email; fastqc_email]
+
+
+  type hla_results = {
+    optitype_normal : [ `Optitype_result ] Bfx.repr option;
+    optitype_tumor : [ `Optitype_result ] Bfx.repr option;
+    optitype_rna: [ `Optitype_result ] Bfx.repr option;
+    seq2hla: [ `Seq2hla_result ] Bfx.repr option;
+    mhc_alleles : [ `MHC_alleles ] Bfx.repr option}
+  let hla_pipeline ?rna_samples ~parameters ~normal_samples ~tumor_samples =
+    let open Parameters in
+    let optitype_normal, optitype_tumor =
+      let {with_optitype_normal; with_optitype_tumor; _} = parameters in
+      (if with_optitype_normal
+       then
+         Some (optitype_hla (concat_samples normal_samples) `DNA "Normal")
+       else None),
+      (if with_optitype_tumor
+       then
+         Some (optitype_hla (concat_samples tumor_samples) `DNA "Tumor")
+       else None)
+    in
+    let seq2hla, optitype_rna =
+      match rna_samples with
+      | None -> None, None
+      | Some rna_samples ->
+        let fqs = concat_samples rna_samples in
+        begin match parameters.with_seq2hla, parameters.with_optitype_rna with
+        | false, false -> (None, None)
+        | false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
+        | true, false -> (Some (seq2hla_hla fqs), None)
+        | true, true ->
+          (Some (seq2hla_hla fqs), Some (optitype_hla fqs `RNA "RNA"))
+        end
+    in
+    (* HLA priority list
+         - Manual HLAs
+         - Seq2HLA results
+         - OptiType on Normal DNA
+         - OptiType on Tumor DNA
+         - OptiType on Tumor RNA *)
+    let mhc_alleles =
+      let optitype_hla =
+        match optitype_normal, optitype_tumor, optitype_rna with
+        | Some n, _, _ -> Some n
+        | None, Some t, _ -> Some t
+        | None, None, Some r -> Some r
+        | None, None, None -> None
+      in
+      begin match parameters.mhc_alleles, seq2hla, optitype_hla with
+      | Some alleles, _, _ -> Some (Bfx.mhc_alleles (`Names alleles))
+      | None, Some s, _ -> Some (Bfx.hlarp (`Seq2hla s))
+      | None, None, Some s -> Some (Bfx.hlarp (`Optitype s))
+      | None, None, None -> None
+      end
+    in
+    {optitype_normal; optitype_tumor; seq2hla; optitype_rna; mhc_alleles;}
 
   let run parameters =
     let open Parameters in
-    let rna =
-      Option.map parameters.rna_inputs ~f:(List.map ~f:Stdlib.fastq_of_input) in
+    let rna_samples =
+      Option.map ~f:(List.map ~f:Stdlib.fastq_of_input) parameters.rna_inputs in
+    let normal_samples =
+        List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
+    let tumor_samples =
+        List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs in
     let normal_bam, tumor_bam =
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in
@@ -295,33 +384,21 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         ~tumor:(parameters.tumor_inputs |> to_bam)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
     in
-    let normal_bam_flagstat, tumor_bam_flagstat =
-      Bfx.flagstat normal_bam |> Bfx.save "normal-bam-flagstat",
-      Bfx.flagstat tumor_bam |> Bfx.save "tumor-bam-flagstat"
-    in
     let bedfile = parameters.bedfile in
     let vcfs =
-      let {with_mutect2; with_varscan; with_somaticsniper; _} = parameters in
-      vcf_pipeline
-        ~mouse_run:parameters.mouse_run
-        ?bedfile
-        ~with_mutect2
-        ~with_varscan
-        ~with_somaticsniper
-        ~reference_build:parameters.reference_build
-        ~normal:normal_bam ~tumor:tumor_bam in
+      vcf_pipeline ~parameters ?bedfile ~normal:normal_bam ~tumor:tumor_bam in
     let somatic_vcfs =
       List.filter ~f:(fun (_, somatic, _) -> somatic) vcfs
       |> List.map ~f:(fun (_, _, v) -> v) in
     let rna_results =
-      match rna with
+      let {reference_build; with_seq2hla; with_optitype_rna; _} = parameters in
+      match rna_samples with
       | None -> None
-      | Some r ->
-        Some (rna_pipeline r ~reference_build:parameters.reference_build
-                ~parameters ~with_seq2hla:parameters.with_seq2hla
-                ~with_optitype_rna:parameters.with_optitype_rna)
+      | Some rnas ->
+        Some (rna_pipeline rnas
+                ~reference_build ~parameters)
     in
-    let maybe_annotated =
+    let vcfs =
       match parameters.reference_build with
       | "b37" | "hg19" ->
         List.map vcfs ~f:(fun (k, somatic, vcf) ->
@@ -330,96 +407,49 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       | _ -> List.map vcfs ~f:(fun (name, somatic, v) ->
           name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
-    (* Concat all the normal and tumor reads into one (or a pair of) FASTQ for
-       use by seq2hla etc. *)
-    let normal =
-      concat_samples
-        (List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs) in
-    let tumor =
-      concat_samples
-        (List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs) in
-    (* HLA priority list
-         - Manual HLAs
-         - Seq2HLA results
-         - OptiType on Normal DNA
-         - OptiType on Tumor DNA
-         - OptiType on Tumor RNA
-    *)
-    let optitype_normal, optitype_tumor =
-      let {with_optitype_normal; with_optitype_tumor; _} = parameters in
-      (if with_optitype_normal then (Some (optitype_hla normal `DNA "Normal")) else None),
-      (if with_optitype_tumor then (Some (optitype_hla tumor `DNA "Tumor")) else None)
-    in
-    let optitype_hla =
-      let optitype_rna = rna_results >>= fun {optitype_rna; _} -> optitype_rna in
-      begin match optitype_normal, optitype_tumor, optitype_rna with
-      | Some n, _, _ -> Some n
-      | None, Some t, _ -> Some t
-      | None, None, Some r -> Some r
-      | None, None, None -> None
-      end
-    in
-    let mhc_alleles =
-      let seq2hla = rna_results >>= fun {seq2hla; _} -> seq2hla in
-      begin match parameters.mhc_alleles, seq2hla, optitype_hla with
-      | Some alleles, _, _ -> Some (Bfx.mhc_alleles (`Names alleles))
-      | None, Some s, _ -> Some (Bfx.hlarp (`Seq2hla s))
-      | None, None, Some s -> Some (Bfx.hlarp (`Optitype s))
-      | None, None, None -> None
-      end
-    in
+    let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
+      hla_pipeline ~parameters ~normal_samples ~tumor_samples ?rna_samples in
     let vaxrank =
+      let open Option in
       rna_results
       >>= fun {rna_bam; _} ->
       mhc_alleles
       >>= fun alleles ->
       return (
-        Bfx.vaxrank
-          ~configuration:vaxrank_config
-          somatic_vcfs
-          rna_bam
-          `NetMHCcons
-          alleles
+        Bfx.vaxrank ~configuration:vaxrank_config somatic_vcfs rna_bam
+          `NetMHCcons alleles
         |> Bfx.save "Vaxrank"
       ) in
-    let fastqc_normal = qc normal |> Bfx.save "QC:normal" in
-    let fastqc_tumor = qc tumor |> Bfx.save "QC:tumor" in
-    let fastqc_rna =
-      match rna with
-      | None -> None
-      | Some rna ->
-        let rna =
-          Bfx.list_map ~f:(Bfx.lambda (fun f -> Bfx.concat f)) (Bfx.list rna) in
-        Some (Bfx.save "QC:rna" (qc rna)) in
+    let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
+      fastqc_pipeline ~normal_samples ~tumor_samples ?rna_samples () in
+    let fastqcs =
+      let f name = fun i f ->
+        let name = name ^ "-" ^ Int.to_string i in
+        name, f
+      in
+      List.mapi ~f:(f "normal") fastqc_results.normal_fastqcs
+      @ List.mapi ~f:(f "tumor") fastqc_results.tumor_fastqcs
+      @ List.mapi ~f:(f "RNA")
+        (Option.value ~default:[] fastqc_results.rna_fastqcs) in
+    let normal_bam_flagstat, tumor_bam_flagstat =
+      Bfx.flagstat normal_bam |> Bfx.save "normal-bam-flagstat",
+      Bfx.flagstat tumor_bam |> Bfx.save "tumor-bam-flagstat"
+    in
     let emails =
-      let rna_bam_flagstat =
-        rna_results >>= fun {rna_bam_flagstat; _} -> return rna_bam_flagstat in
-      match parameters.email_options with
-      | None -> None
-      | Some email_options ->
-        let flagstat_email =
-          Bfx.flagstat_email
-            ~normal:normal_bam_flagstat ~tumor:tumor_bam_flagstat
-            ?rna:rna_bam_flagstat email_options
-        in
-        let fastqc_email =
-          Bfx.fastqc_email
-            ~normal:fastqc_normal ~tumor:fastqc_tumor
-            ?rna:fastqc_rna email_options in
-        Some [flagstat_email; fastqc_email] in
+      email_pipeline
+        ?rna_results ~parameters ~normal_bam_flagstat ~tumor_bam_flagstat ~fastqcs in
     let report =
       let rna_bam, optitype_rna, stringtie, seq2hla, rna_bam_flagstat =
         match rna_results with
         | None -> None, None, None, None, None
-        | Some {rna_bam; optitype_rna; stringtie; seq2hla; rna_bam_flagstat} ->
+        | Some {rna_bam; stringtie; rna_bam_flagstat} ->
           Some rna_bam, optitype_rna, Some stringtie,
           seq2hla, Some rna_bam_flagstat
       in
       Bfx.report
         (Parameters.construct_run_name parameters)
         ?igv_url_server_prefix:parameters.igv_url_server_prefix
-        ~vcfs:maybe_annotated ?bedfile
-        ~fastqc_normal ~fastqc_tumor ?fastqc_rna
+        ~vcfs ?bedfile ~fastqcs
         ~normal_bam ~tumor_bam ?rna_bam
         ~normal_bam_flagstat ~tumor_bam_flagstat
         ?optitype_normal ?optitype_tumor ?optitype_rna

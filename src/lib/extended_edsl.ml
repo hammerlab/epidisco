@@ -60,13 +60,11 @@ module Apply_functions (B : Semantics) = struct
     in
     fwd email
 
-  let fastqc_email ~normal ~tumor ?rna email_options =
+  let fastqc_email ~fastqcs email_options =
     let open The_pass.Transformation in
     let email =
       (B.fastqc_email
-         ~normal:(bwd normal)
-         ~tumor:(bwd tumor)
-         ?rna:(Option.map rna bwd)
+         ~fastqcs:(List.map ~f:(fun (name, f) -> (name, bwd f)) fastqcs)
          email_options)
     in
     fwd email
@@ -74,9 +72,7 @@ module Apply_functions (B : Semantics) = struct
   let report
       ?igv_url_server_prefix
       ~vcfs
-      ~fastqc_normal
-      ~fastqc_tumor
-      ?fastqc_rna
+      ~fastqcs
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -97,9 +93,7 @@ module Apply_functions (B : Semantics) = struct
     let open The_pass.Transformation in
     fwd (B.report meta
            ~vcfs:(List.map ~f:(fun (k, v) -> k, bwd v) vcfs)
-           ~fastqc_normal:(bwd fastqc_normal)
-           ~fastqc_tumor:(bwd fastqc_tumor)
-           ?fastqc_rna:(Option.map fastqc_rna bwd)
+           ~fastqcs:(List.map ~f:(fun (name, f) -> (name, bwd f)) fastqcs)
            ~normal_bam:(bwd normal_bam)
            ~normal_bam_flagstat:(bwd normal_bam_flagstat)
            ~tumor_bam:(bwd tumor_bam)

@@ -105,21 +105,19 @@ do
 done
 |bash}
 
-let summarize_fastqc
-    ~machine ~normal_fastqc ~tumor_fastqc ?rna_fastqc summary_file =
+let summarize_fastqcs ~machine ~fastqcs summary_file =
   let fqc_cmd name fqc =
     let paths = (String.concat ~sep:" " fqc#product#paths) in
     sprintf "bash ${SUMMARIZE} %s %s" name paths in
-  let opt_map_list o f = Option.value_map o ~default:[] ~f:(fun r -> [f r]) in
   let fastqc_cmds =
-    List.map ([fqc_cmd "normal" normal_fastqc;
-               fqc_cmd "tumor" tumor_fastqc;
-              ] @ opt_map_list rna_fastqc (fqc_cmd "rna"))
-      ~f:(fun cmd -> Program.shf "%s >> %s" cmd summary_file) in
+    List.map fastqcs ~f:(fun (name, f) ->
+        let cmd = fqc_cmd name f in
+        Program.shf "%s >> %s" cmd summary_file) in
   let cmd = [Program.sh "export SUMMARIZE=$(mktemp)";
              Program.shf "cat << 'EOF' > ${SUMMARIZE}
 %s
-EOF" summarize_qc_script] @ fastqc_cmds in
+EOF"
+               summarize_qc_script] @ fastqc_cmds in
   let name = "Summarize FASTQC results" in
   let make =
     Biokepi.Machine.quick_run_program machine (Program.chain cmd)
@@ -127,9 +125,7 @@ EOF" summarize_qc_script] @ fastqc_cmds in
   let host = Biokepi.Machine.(as_host machine) in
   workflow_node (single_file summary_file ~host)
     ~name ~make
-    ~edges:(List.map ~f:(fun n -> depends_on n)
-              ([normal_fastqc; tumor_fastqc]
-               @ opt_map_list rna_fastqc (fun i -> i)))
+    ~edges:(List.map ~f:(fun (name, f) -> depends_on f) fastqcs)
 
 
 module EDSL = struct
@@ -152,9 +148,7 @@ module EDSL = struct
       [ `Email ] repr
 
     val fastqc_email :
-      normal:([ `Fastqc ] repr) ->
-      tumor:([ `Fastqc ] repr) ->
-      ?rna:([ `Fastqc ] repr) ->
+      fastqcs:(string * [ `Fastqc ] repr) list ->
       email_options ->
       [ `Email ] repr
   end
@@ -213,21 +207,18 @@ module EDSL = struct
           wrapper in
       Email email
 
-    let fastqc_email ~normal ~tumor ?rna email_options =
+    let fastqc_email ~fastqcs email_options =
       let wrapper =
         let get_fqc =
           Biokepi.EDSL.Compile.To_workflow.File_type_specification.
             get_fastqc_result
         in
-        let normal_fastqc, tumor_fastqc, rna_fastqc =
-          get_fqc normal,
-          get_fqc tumor,
-          Option.map ~f:get_fqc rna in
+        let fastqcs =
+          List.map fastqcs ~f:(fun (n, f) -> n, get_fqc f) in
         let summary_file =
           work_dir // "fastqc-summary.txt"
         in
-        summarize_fastqc
-          ~machine ~normal_fastqc ~tumor_fastqc ?rna_fastqc summary_file
+        summarize_fastqcs ~machine ~fastqcs summary_file
       in
       let subject = sprintf "FASTQC results for %s" run_name in
       let email =
@@ -245,7 +236,7 @@ module EDSL = struct
     let flagstat_email ~normal ~tumor ?rna email_options =
       fun ~var_count -> Final_report.To_dot.function_call "flagstat_email" [
         ]
-    let fastqc_email ~normal ~tumor ?rna email_options =
+    let fastqc_email ~fastqcs email_options =
       fun ~var_count -> Final_report.To_dot.function_call "fastqc_email" [
         ]
   end
@@ -270,24 +261,18 @@ module EDSL = struct
           ]
         in
         json
-    let fastqc_email ~normal ~tumor ?rna email_options =
+    let fastqc_email ~fastqcs email_options =
       fun ~var_count ->
-        let opt n o =
-          Option.value_map ~default:[] o ~f:(fun v -> [n, v ~var_count]) in
-        let args = [
-          "normal fastqc", normal ~var_count;
-          "tumor fastqc", tumor ~var_count;
-          "to email", `String email_options.to_email;
-          "from email", `String email_options.from_email
-        ]
-          @ opt "rna fastqc" rna
+        let args =
+          List.map fastqcs
+            ~f:(fun (name, f) -> sprintf "%s fastqc" name, f ~var_count)
+          @ ["to email", `String email_options.to_email;
+             "from email", `String email_options.from_email ]
         in
         let json : Yojson.Basic.json =
           `Assoc [
             "fastqc email",
-            `Assoc args
-          ]
-        in
+            `Assoc args ] in
         json
   end
 

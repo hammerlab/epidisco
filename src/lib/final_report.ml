@@ -27,9 +27,7 @@ module type Semantics = sig
   val report :
     ?igv_url_server_prefix: string ->
     vcfs:(string * [ `Vcf ] repr) list ->
-    fastqc_normal: [ `Fastqc ] repr ->
-    fastqc_tumor: [ `Fastqc ] repr ->
-    ?fastqc_rna: [ `Fastqc ] repr ->
+    fastqcs:(string * [ `Fastqc ] repr) list ->
     normal_bam: [ `Bam ] repr ->
     normal_bam_flagstat: [ `Flagstat ] repr ->
     tumor_bam: [ `Bam ] repr ->
@@ -57,9 +55,7 @@ module To_json = struct
   let report
       ?igv_url_server_prefix
       ~vcfs
-      ~fastqc_normal
-      ~fastqc_tumor
-      ?fastqc_rna
+      ~fastqcs
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -86,9 +82,9 @@ module To_json = struct
           "metadata", `Assoc (List.map metadata ~f:(fun (k, v) -> k, `String v));
         ]
         @ List.map vcfs ~f:(fun (k, v) -> k, v ~var_count)
+        @ List.map fastqcs
+          ~f:(fun (name, f) -> sprintf "%s-fastqc" name, f ~var_count)
         @ [
-          "qc-normal", fastqc_normal ~var_count;
-          "qc-tumor", fastqc_tumor ~var_count;
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
           "normal-bam-flagstat", normal_bam_flagstat ~var_count;
@@ -98,7 +94,6 @@ module To_json = struct
         @ opt "optitype-tumor" optitype_tumor
         @ opt "optitype-rna" optitype_rna
         @ opt "rna-bam" rna_bam
-        @ opt "rna-fastqc" fastqc_rna
         @ opt "rna-bam-flagstat" rna_bam_flagstat
         @ opt "vaxrank" vaxrank
         @ opt "topiary" topiary
@@ -139,9 +134,7 @@ module To_dot = struct
   let report
       ?igv_url_server_prefix
       ~vcfs
-      ~fastqc_normal
-      ~fastqc_tumor
-      ?fastqc_rna
+      ~fastqcs
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -166,9 +159,9 @@ module To_dot = struct
         ["run-name", string meta;]
         @ List.map vcfs ~f:(fun (k, v) ->
             k, v ~var_count)
+        @ List.map fastqcs
+          ~f:(fun (name, f) -> sprintf "%s-fastqc" name, f ~var_count)
         @ [
-          "qc-normal", fastqc_normal ~var_count;
-          "qc-tumor", fastqc_tumor ~var_count;
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
           "normal-bam-flagstat", normal_bam_flagstat ~var_count;
@@ -178,7 +171,6 @@ module To_dot = struct
         @ opt "optitype-tumor" optitype_tumor
         @ opt "optitype-rna" optitype_rna
         @ opt "rna-bam" rna_bam
-        @ opt "rna-fastqc" fastqc_rna
         @ opt "rna-bam-flagstat" rna_bam_flagstat
         @ opt "vaxrank" vaxrank
         @ opt "topiary" topiary
@@ -266,9 +258,7 @@ module To_workflow
   let report
       ?igv_url_server_prefix
       ~vcfs
-      ~fastqc_normal
-      ~fastqc_tumor
-      ?fastqc_rna
+      ~fastqcs
       ~normal_bam
       ~normal_bam_flagstat
       ~tumor_bam
@@ -341,9 +331,8 @@ module To_workflow
           Option.value_map o ~default:[] ~f:(fun v -> [ f v |> depends_on ]) in
         depends_on igv_dot_xml
         :: List.map vcfs ~f:(fun (_, v) -> get_vcf v |> depends_on)
+        @ List.map fastqcs ~f:(fun (_, f) -> get_fastqc_result f |> depends_on)
         @ [
-          get_fastqc_result fastqc_normal |> depends_on;
-          get_fastqc_result fastqc_tumor |> depends_on;
           get_bam normal_bam |> depends_on;
           get_bam tumor_bam |> depends_on;
           get_flagstat_result tumor_bam_flagstat |> depends_on;
@@ -353,7 +342,6 @@ module To_workflow
         @ opt optitype_tumor get_optitype_result
         @ opt optitype_rna get_optitype_result
         @ opt rna_bam get_bam
-        @ opt fastqc_rna get_fastqc_result
         @ opt vaxrank get_vaxrank_result
         @ opt rna_bam_flagstat get_flagstat_result
         @ opt topiary get_topiary_result
@@ -475,25 +463,14 @@ module To_workflow
     in
     let qc_section =
       let open Option in
-      let n = get_fastqc_result fastqc_normal in
-      let t = get_fastqc_result fastqc_tumor in
-      let r = fastqc_rna >>= fun r -> return (get_fastqc_result r) in
       let items =
-        List.filter_map [
-          (List.nth n#product#paths 0, "FastQC Normal : Read 1");
-          (List.nth n#product#paths 1, "FastQC Normal : Read 2");
-          (List.nth t#product#paths 0, "FastQC Tumor : Read 1");
-          (List.nth t#product#paths 1, "FastQC Tumor : Read 2");
-          ((r >>= fun r -> List.nth r#product#paths 0), "FastQC RNA : Read 1");
-          ((r >>= fun r -> List.nth r#product#paths 1), "FastQC RNA : Read 2");
-        ]
-          ~f:(function
-            | None, _ -> None
-            | Some p, title ->
-              Some (list_item title p))
+        List.concat_map fastqcs
+          ~f:(fun (name, f) ->
+              let f = get_fastqc_result f in
+              List.mapi f#product#paths ~f:(fun i p ->
+                  let title = sprintf "%s : Read %d" name i in
+                  list_item title p))
       in
-      let _, json =
-        saved_paths ~json_of_dirname:true (List.nth_exn n#product#paths 0) in
       let inline_code name cmd =
         let id = Digest.(string name |> to_hex) in
         let button = "&#x261F;" in
@@ -514,10 +491,8 @@ module To_workflow
         `String (
           sprintf {html|<h2>Dataset QC</h2><ul>
                         %s
-                        <li>FastqQC Pipeline: %s</li>
                   |html}
-            (String.concat ~sep:"\n" items)
-            (relative_link ~href:json "JSON"));
+            (String.concat ~sep:"\n" items));
       ]
       @ inline_code "Normal Bam Flagstat"
         (cat_flatstat normal_bam_flagstat)

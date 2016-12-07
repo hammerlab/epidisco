@@ -425,9 +425,18 @@ module To_workflow
           "OptiType-RNA",
           Option.map optitype_rna ~f:(fun i ->
               (get_optitype_result i)#product#path);
-          "Vaxrank",
-          Option.map vaxrank ~f:(fun i ->
-              (get_vaxrank_result i)#product#text_report_path);
+          "Vaxrank ASCII",
+          Option.(
+            vaxrank >>= fun v ->
+            (get_vaxrank_result v)#product#ascii_report_path);
+          "Vaxrank PDF",
+          Option.(
+            vaxrank >>= fun v ->
+            (get_vaxrank_result v)#product#pdf_report_path);
+          "Vaxrank XLSX",
+          Option.(
+            vaxrank >>= fun v ->
+            (get_vaxrank_result v)#product#xlsx_report_path);
           "Topiary",
           Option.map topiary ~f:(fun i ->
               (get_topiary_result i)#product#path);

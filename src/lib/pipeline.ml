@@ -254,8 +254,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     List.map samples ~f:sample_to_bam
     |> Bfx.list
     |> Bfx.merge_bams
-    |> Bfx.gatk_indel_realigner
-      ~configuration:indel_realigner_config
 
 
   let seq2hla_hla fqs =

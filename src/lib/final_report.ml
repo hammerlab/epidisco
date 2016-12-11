@@ -98,7 +98,7 @@ module To_json = struct
         @ opt "vaxrank" vaxrank
         @ opt "topiary" topiary
         @ opt "isovar" isovar
-        @ opt "seq2hla" isovar
+        @ opt "seq2hla" seq2hla
         @ opt "stringtie" stringtie
         @ Option.value_map
           ~default:[]

@@ -103,18 +103,29 @@ let run_pipeline
 
 let pipeline ~biokepi_machine ?work_directory =
   let parse_input_files files ~kind =
+    let open Biokepi.EDSL.Library.Input in
     let parse_file file prefix =
-      match Filename.check_suffix file ".bam" with
-      | true ->
-        Biokepi.EDSL.Library.Input.(
-          fastq_sample
-            ~sample_name:(prefix ^ "-" ^
-                          (Filename.chop_extension file |> Filename.basename))
-            [of_bam ~reference_build:"dontcare" `PE file]
-        )
-      | false ->
-        Yojson.Safe.from_file file
-        |> Biokepi.EDSL.Library.Input.of_yojson |> or_fail (prefix ^ "-json") in
+      let guess_sample_name () = 
+        prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+      in
+      let ends_with = Filename.check_suffix file in
+      if (ends_with ".bam") then begin
+        fastq_sample
+          ~sample_name:(guess_sample_name ())
+          [of_bam ~reference_build:"dontcare" `PE file]
+      end
+      else if (ends_with ".fastq" || ends_with ".fastq.gz") then begin
+        match (String.split ~on:(`Character ',') file) with
+        | [ pair1; pair2; ] ->
+            fastq_sample ~sample_name:(guess_sample_name ()) [pe pair1 pair2]
+        | [ single_pair; ] ->
+            fastq_sample ~sample_name:(guess_sample_name ()) [se single_pair]
+        | _ -> failwith "Couldn't parse FASTQ path."
+      end
+      else begin
+        Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
+      end
+    in
     List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
   in
   fun

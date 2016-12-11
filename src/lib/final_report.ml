@@ -427,7 +427,7 @@ module To_workflow
               (get_optitype_result i)#product#path);
           "Vaxrank",
           Option.map vaxrank ~f:(fun i ->
-              (get_vaxrank_result i)#product#text_report_path);
+              (get_vaxrank_result i)#product#output_folder_path);
           "Topiary",
           Option.map topiary ~f:(fun i ->
               (get_topiary_result i)#product#path);

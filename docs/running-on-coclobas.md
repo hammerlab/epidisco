@@ -163,5 +163,39 @@ If you'd like to submit with your own data, you can inspect the options of
 You can watch the run execute through the Ketrew Web UI found at `./disco.sh
 ketrew-ui`; the result of the run can be found in `$BIOKEPI_WORK_DIR/results`.
 
+### Adding more NFS servers to make simultaneous Epidisco runs efficient
 
+If you are planning to run more than 2-3 epidisco workflows on the same cluster,
+the default single-node NFS server can easily become a bottleneck for all jobs,
+where each epidisco workflow will end up competing for the NFS resources and
+this will dramatically slow all workflows down.
 
+To overcome this issue, you can add more NFS servers to the Epidisco setup
+and let each workflow use a separate NFS as a working directory. The following
+command, for example, will create a new NFS server with 1TB storage and mount
+it to `/nfs-pool2/`:
+
+```
+# 1000 GB = 1 TB
+./disco.sh add-new-nfs name-for-my-new-nfs 1000 /nfs-pool2
+```
+
+and you can then set this folder as your working directory:
+
+```
+# Use tools, reference, and cache data from the main NFS server
+# but make use of the new NFS server for the current job
+# and save results back to the main NFS server.
+WORK_DIR=$BIOKEPI_WORK_DIR \
+BIOKEPI_WORK_DIR=/nfs-pool2/biokepi/ \
+INSTALL_TOOLS_PATH=$OLD_WORK_DIR/toolkit \
+PYENSEMBL_CACHE_DIR=$OLD_WORK_DIR/pyensembl-cache \
+REFERENCE_GENOMES_PATH=$OLD_WORK_DIR/reference-genome \
+    ocaml run_pipeline.ml pipeline \
+      --results-path $OLD_WORK_DIR/results/ \
+      --normal ...
+```
+
+the information on this new NFS will be saved into your `configuration.env`
+and when you re-`start-all` the epidisco, the additional NFS storage will
+automatically mounted if it has not been at the time of the operation.

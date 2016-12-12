@@ -180,20 +180,39 @@ get-project-name () {
     echo $project
 }
 
-create-nfs () {
-    local size=$1
+new-nfs () {
+    local server_name=$1
+    local size=$2
+    local mount_point=$3
+
     local project=$(get-project-name)
     source /coclo/configuration.env
+
     # This utility (https://github.com/cioc/gcloudnfs) is pre-installed on the
     # Docker image.
     gcloudnfs create --zone $GCLOUD_ZONE --project $project \
               --network default --machine-type n1-standard-1 \
-              --server-name $NFS_SERVER_NAME \
-              --data-disk-name $NFS_SERVER_NAME-disk --data-disk-type pd-standard \
+              --server-name $server_name \
+              --data-disk-name $server_name-disk --data-disk-type pd-standard \
               --data-disk-size $size
-    sudo mkdir -p /nfs-pool
-    sudo mount -t nfs $NFS_SERVER_NAME:/nfs-pool /nfs-pool
-    touch /nfs-pool/.witness.txt
+    sudo mkdir -p $mount_point
+    sudo mount -t nfs $server_name:/nfs-pool $mount_point
+    touch $mount_point/.witness.txt
+}
+
+create-nfs () {
+    local size=$1
+    source /coclo/configuration.env
+    new-nfs $NFS_SERVER_NAME $size /nfs-pool
+}
+
+add-new-nfs () {
+    local server_name=$1
+    local size=$2
+    local mount_point=$3
+
+    new-nfs $server_name $size $mount_point
+    echo "export NFS_MOUNTS=\$NFS_MOUNTS:$server_name,/nfs-pool/,.witness.txt,$mount_point" >> /coclo/configuration.env
 }
 
 add-disk-to-nfs () {

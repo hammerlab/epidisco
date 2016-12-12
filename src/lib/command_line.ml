@@ -117,14 +117,14 @@ let pipeline ~biokepi_machine ?work_directory =
          - JSON file: /path/to/sample.json
          - BAM file: https://url.to/my.bam
          - Single-end FASTQ: /path/to/single.fastq.gz
-         - Paired-end FASTQ: /p/t/pair1.fastq;/p/t/pair2.fastq
+         - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq
          ...
       *)
       if (ends_with ".bam") then begin
         fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
       end
       else if (ends_with ".fastq" || ends_with ".fastq.gz") then begin
-        match (String.split ~on:(`Character ';') file) with
+        match (String.split ~on:(`Character '@') file) with
         | [ pair1; pair2; ] -> fastq_sample ~sample_name [pe pair1 pair2]
         | [ single_end; ] -> fastq_sample ~sample_name [se single_end]
         | _ -> failwith "Couldn't parse FASTQ path."
@@ -212,11 +212,11 @@ let args pipeline =
         "PATH/URI(s) to data files (BAM, FASTQ, FASTQ.gz) or serialized \
          sample description in JSON format for the %S sample. \
          Use comma (,) as a delimiter to provide multiple data files \
-         and semi-colon (;) when describing paired-end FASTQ files."
+         and semi-colon (@) when describing paired-end FASTQ files."
         option_name
     in
     let inf =
-      Arg.info [option_name] ~doc ~docv:"PATH[,PATH2,[PATH3_1\\;PATH3_2],...]"
+      Arg.info [option_name] ~doc ~docv:"PATH[,PATH2,[PATH3_1@PATH3_2],...]"
     in
     pure f
     $

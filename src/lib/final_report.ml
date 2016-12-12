@@ -355,9 +355,10 @@ module To_workflow
                 let run_with = machine in
                 let gzip = s#gzip in
                 let is_directory = s#is_directory in
+                let name = s#name in
                 Save_result.make_saving_node
                   ~saving_path ~json_pipeline ~key ~run_with ~work_dir
-                  ~gzip ~is_directory s#edge s#path
+                  ~gzip ~is_directory ~name s#edge s#path
                 |> depends_on
               )
           )

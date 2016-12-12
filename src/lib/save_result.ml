@@ -32,7 +32,7 @@ let construct_relative_path ~work_dir original_path =
 let json_dump_path path = Name_file.from_path ".json" path []
 
 let make_saving_node
-    ~saving_path ~json_pipeline ~key ~run_with ~work_dir
+    ~saving_path ~json_pipeline ~key ~run_with ~work_dir ~name
     ?(gzip = false) ?(is_directory = false)
     edge path =
   let open Ketrew.EDSL in
@@ -41,6 +41,7 @@ let make_saving_node
     `Assoc [
       "file", `String copied_path;
       "key", `String key;
+      "name", `String name;
       "pipeline", json_pipeline;
     ] in
   let make =
@@ -64,7 +65,7 @@ let make_saving_node
       )
   in
   let name =
-    sprintf "Saved: %s" key in
+    sprintf "Saved: %s" name in
   let product =
     single_file ~host:(Biokepi.Machine.as_host run_with) copied_path in
   let ensures =
@@ -100,6 +101,7 @@ module type Compilation_memory = sig
     < path: string;
       is_directory : bool;
       gzip : bool;
+      name: string;
       edge: Ketrew.EDSL.workflow_edge >
 
   val add_to_save: string -> to_save list -> unit
@@ -142,6 +144,7 @@ module Mem () : Compilation_memory = struct
     < path: string;
       is_directory : bool;
       gzip : bool;
+      name: string;
       edge: Ketrew.EDSL.workflow_edge >
   let to_save = ref []
   let add_to_save key things =
@@ -160,23 +163,25 @@ module To_workflow
   open Biokepi.EDSL.Compile.To_workflow.File_type_specification
 
   let save : string -> t -> t = fun key x ->
-    let saved ?(gzip = false) ?(is_directory = false) path wf =
+    let saved ?(gzip = false) ?(is_directory = false) ?name path wf =
       object
         method path = path
         method edge = Ketrew.EDSL.depends_on wf
         method is_directory = is_directory
         method gzip = gzip
+        method name = match name with Some n -> n | None -> key
       end in
     begin match x with
     | Bam wf ->
       let bai =
         Biokepi.Tools.Samtools.index_to_bai
           ~run_with:Config.machine
-          ~check_sorted:false wf in
+          ~check_sorted:false wf
+      in
       Mem.add_to_save key [
         saved wf#product#path wf;
-        saved bai#product#path bai;
-      ]
+        saved ~name:(key ^ "-index") bai#product#path bai;
+      ];
     | Vcf wf ->
       Mem.add_to_save key [
         saved ~gzip:true wf#product#path wf;

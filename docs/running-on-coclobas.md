@@ -176,7 +176,8 @@ command, for example, will create a new NFS server with 1TB storage and mount
 it to `/nfs-pool2/`:
 
 ```
-# 1000 GB = 1 TB
+# Run this inside the server docker image (post: `start-all`)
+# Size: 1000 GB = 1 TB
 ./disco.sh add-new-nfs name-for-my-new-nfs 1000 /nfs-pool2
 ```
 
@@ -186,13 +187,13 @@ and you can then set this folder as your working directory:
 # Use tools, reference, and cache data from the main NFS server
 # but make use of the new NFS server for the current job
 # and save results back to the main NFS server.
-WORK_DIR=$BIOKEPI_WORK_DIR \
+ORIGINAL_WORK_DIR=$BIOKEPI_WORK_DIR \
 BIOKEPI_WORK_DIR=/nfs-pool2/biokepi/ \
-INSTALL_TOOLS_PATH=$OLD_WORK_DIR/toolkit \
-PYENSEMBL_CACHE_DIR=$OLD_WORK_DIR/pyensembl-cache \
-REFERENCE_GENOMES_PATH=$OLD_WORK_DIR/reference-genome \
+INSTALL_TOOLS_PATH=$ORIGINAL_WORK_DIR/toolkit \
+PYENSEMBL_CACHE_DIR=$ORIGINAL_WORK_DIR/pyensembl-cache \
+REFERENCE_GENOMES_PATH=$ORIGINAL_WORK_DIR/reference-genome \
     ocaml run_pipeline.ml pipeline \
-      --results-path $OLD_WORK_DIR/results/ \
+      --results-path $ORIGINAL_WORK_DIR/results/ \
       --normal ...
 ```
 

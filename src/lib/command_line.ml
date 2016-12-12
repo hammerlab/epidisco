@@ -103,18 +103,36 @@ let run_pipeline
 
 let pipeline ~biokepi_machine ?work_directory =
   let parse_input_files files ~kind =
+    let open Biokepi.EDSL.Library.Input in
     let parse_file file prefix =
-      match Filename.check_suffix file ".bam" with
-      | true ->
-        Biokepi.EDSL.Library.Input.(
-          fastq_sample
-            ~sample_name:(prefix ^ "-" ^
-                          (Filename.chop_extension file |> Filename.basename))
-            [of_bam ~reference_build:"dontcare" `PE file]
-        )
-      | false ->
-        Yojson.Safe.from_file file
-        |> Biokepi.EDSL.Library.Input.of_yojson |> or_fail (prefix ^ "-json") in
+      let sample_name =
+        prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+      in
+      let ends_with = Filename.check_suffix file in
+      (*
+        Beside serialized sample description files,
+        we also would like to capture direct paths to the BAMs/FASTQs
+        to make it easier for the user to submit samples.
+        Examples
+         - JSON file: /path/to/sample.json
+         - BAM file: https://url.to/my.bam
+         - Single-end FASTQ: /path/to/single.fastq.gz
+         - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq
+         ...
+      *)
+      if (ends_with ".bam") then begin
+        fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
+      end
+      else if (ends_with ".fastq" || ends_with ".fastq.gz") then begin
+        match (String.split ~on:(`Character '@') file) with
+        | [ pair1; pair2; ] -> fastq_sample ~sample_name [pe pair1 pair2]
+        | [ single_end; ] -> fastq_sample ~sample_name [se single_end]
+        | _ -> failwith "Couldn't parse FASTQ path."
+      end
+      else begin
+        Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
+      end
+    in
     List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
   in
   fun
@@ -128,9 +146,9 @@ let pipeline ~biokepi_machine ?work_directory =
     (`With_varscan with_varscan)
     (`With_somaticsniper with_somaticsniper)
     (`Bedfile bedfile)
-    (`Normal_json normal_json_files)
-    (`Tumor_json tumor_json_files)
-    (`Rna_json rna_json_files)
+    (`Normal_sample normal_sample_files)
+    (`Tumor_sample tumor_sample_files)
+    (`Rna_sample rna_sample_files)
     (`Ref reference_build)
     (`Results results_path)
     (`Output_dot output_dot_to_png)
@@ -143,9 +161,11 @@ let pipeline ~biokepi_machine ?work_directory =
     (`To_email to_email)
     (`Igv_url_server_prefix igv_url_server_prefix)
     ->
-      let normal_inputs = parse_input_files normal_json_files ~kind:"normal" in
-      let tumor_inputs = parse_input_files tumor_json_files ~kind:"tumor" in
-      let rna_inputs = parse_input_files rna_json_files ~kind:"rna" in
+      let normal_inputs =
+        parse_input_files normal_sample_files ~kind:"normal"
+      in
+      let tumor_inputs = parse_input_files tumor_sample_files ~kind:"tumor" in
+      let rna_inputs = parse_input_files rna_sample_files ~kind:"rna" in
       let email_options =
         match
           to_email, from_email, mailgun_domain_name, mailgun_api_key with
@@ -186,9 +206,18 @@ let pipeline ~biokepi_machine ?work_directory =
 let args pipeline =
   let open Cmdliner in
   let open Cmdliner.Term in
-  let json_files_arg ?(req = true) option_name f =
-    let doc = sprintf "JSON file(s) describing the %S sample(s)" option_name in
-    let inf = Arg.info [option_name] ~doc ~docv:"PATH" in
+  let sample_files_arg ?(req = true) option_name f =
+    let doc =
+      sprintf
+        "PATH/URI(s) to data files (BAM, FASTQ, FASTQ.gz) or serialized \
+         sample description in JSON format for the %S sample. \
+         Use comma (,) as a delimiter to provide multiple data files \
+         and semi-colon (@) when describing paired-end FASTQ files."
+        option_name
+    in
+    let inf =
+      Arg.info [option_name] ~doc ~docv:"PATH[,PATH2,[PATH3_1@PATH3_2],...]"
+    in
     pure f
     $
     Arg.(
@@ -230,9 +259,9 @@ let args pipeline =
   $ tool_option (fun e -> `With_varscan e) "varscan"
   $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
   $ bed_file_opt
-  $ json_files_arg "normal" (fun s -> `Normal_json s)
-  $ json_files_arg "tumor" (fun s -> `Tumor_json s)
-  $ json_files_arg ~req:false "rna" (fun s -> `Rna_json s)
+  $ sample_files_arg "normal" (fun s -> `Normal_sample s)
+  $ sample_files_arg "tumor" (fun s -> `Tumor_sample s)
+  $ sample_files_arg ~req:false "rna" (fun s -> `Rna_sample s)
   $ begin
     pure (fun s -> `Ref s)
     $ Arg.(

@@ -45,11 +45,11 @@ let star_config =
 
 let vaxrank_config =
   let open Biokepi.Tools.Vaxrank.Configuration in
-  {name = "PGV-configuration";
+  {name = "epidisco-40pep";
    vaccine_peptide_length = 25;
    padding_around_mutation = 5;
    max_vaccine_peptides_per_mutation = 3;
-   max_mutations_in_report = 20;
+   max_mutations_in_report = 40;
    min_mapping_quality = 1;
    min_variant_sequence_coverage = 1;
    min_alt_rna_reads = 3;

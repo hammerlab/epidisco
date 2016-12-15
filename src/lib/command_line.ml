@@ -105,10 +105,12 @@ let pipeline ~biokepi_machine ?work_directory =
   let parse_input_files files ~kind =
     let open Biokepi.EDSL.Library.Input in
     let parse_file file prefix =
-      let sample_name =
-        prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+      let file_type =
+        let check = Filename.check_suffix file in
+        if check ".bam"                                then `Bam
+        else if (check ".fastq" || check ".fastq.gz")  then `Fastq
+        else                                                `Json
       in
-      let ends_with = Filename.check_suffix file in
       (*
         Beside serialized sample description files,
         we also would like to capture direct paths to the BAMs/FASTQs
@@ -116,22 +118,28 @@ let pipeline ~biokepi_machine ?work_directory =
         Examples
          - JSON file: /path/to/sample.json
          - BAM file: https://url.to/my.bam
-         - Single-end FASTQ: /path/to/single.fastq.gz
-         - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq
+         - Single-end FASTQ: /path/to/single.fastq.gz,..
+         - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..
          ...
       *)
-      if (ends_with ".bam") then begin
-        fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
-      end
-      else if (ends_with ".fastq" || ends_with ".fastq.gz") then begin
-        match (String.split ~on:(`Character '@') file) with
-        | [ pair1; pair2; ] -> fastq_sample ~sample_name [pe pair1 pair2]
-        | [ single_end; ] -> fastq_sample ~sample_name [se single_end]
-        | _ -> failwith "Couldn't parse FASTQ path."
-      end
-      else begin
+      match file_type with
+      | `Bam -> begin
+          let sample_name =
+            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+          in
+          fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
+        end
+      | `Fastq ->  begin
+          let sample_name =
+            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+          in
+          match (String.split ~on:(`Character '@') file) with
+          | [ pair1; pair2; ] -> fastq_sample ~sample_name [pe pair1 pair2]
+          | [ single_end; ] -> fastq_sample ~sample_name [se single_end]
+          | _ -> failwith "Couldn't parse FASTQ path."
+        end
+      | `Json ->
         Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
-      end
     in
     List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
   in

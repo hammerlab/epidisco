@@ -235,6 +235,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let qc fqs = Bfx.concat fqs |> Bfx.fastqc
 
+
   (* Makes a list of samples (which are themselves fastqs or BAMs) into one (or
      two, if paired-end) FASTQs. *)
   let concat_samples samples =
@@ -251,11 +252,23 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       |> Bfx.picard_mark_duplicates
         ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
     in
-    List.map samples ~f:sample_to_bam
-    |> Bfx.list
-    |> Bfx.merge_bams
-    |> Bfx.gatk_indel_realigner
-      ~configuration:indel_realigner_config
+    let bam = List.map samples ~f:sample_to_bam
+              |> Bfx.list
+              |> Bfx.merge_bams in
+    (* We split out the spliced and non-spliced reads so that we can run indel
+       realignment on all reads that don't span a splice junction (and thus
+       cause the GATK IndelRealigner we're using to crash.) We then merge the
+       spliced reads back in. *)
+    let spliced_bam =
+      let filter = Biokepi.Tools.Sambamba.Filter.Defaults.only_split_reads in
+      Bfx.sambamba_filter ~filter bam in
+    let indel_realigned_bam =
+      let filter = Biokepi.Tools.Sambamba.Filter.Defaults.drop_split_reads in
+      Bfx.sambamba_filter ~filter bam
+      |> Bfx.gatk_indel_realigner
+        ~configuration:indel_realigner_config
+    in
+    Bfx.merge_bams @@ Bfx.list [spliced_bam; indel_realigned_bam]
 
 
   let seq2hla_hla fqs =

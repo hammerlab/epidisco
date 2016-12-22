@@ -168,8 +168,6 @@ cluster-status () {
 }
 
 install-epidisco () {
-    opam pin add --yes ketrew 3.0.0
-    opam reinstall ketrew --yes
     opam pin add --yes biokepi "https://github.com/hammerlab/biokepi.git"
     opam pin add --yes epidisco "https://github.com/hammerlab/epidisco.git"
 }

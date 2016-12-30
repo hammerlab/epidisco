@@ -36,8 +36,8 @@ chmod 777 disco.sh
 ```
 
 Once it's created, you will be able to ssh in with `gcloud compute ssh
-example-box-name`. The rest of the instructions will be carried out inside this
-VM.
+example-box-name --zone=$GCLOUD_ZONE`. The rest of the instructions will be
+carried out inside this VM.
 
 
 ### Configuring the Cluster

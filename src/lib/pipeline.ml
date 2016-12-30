@@ -206,7 +206,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let vcf_pipeline ~parameters ?bedfile ~normal ~tumor =
     let open Parameters in
     let {with_mutect2; with_varscan; with_somaticsniper;
-           mouse_run; reference_build; _} = parameters in
+         mouse_run; reference_build; _} = parameters in
     let opt_vcf test name somatic vcf =
       if test then [name, somatic, vcf ()] else []
     in
@@ -220,7 +220,14 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         "haplo-tumor", false, Bfx.gatk_haplotype_caller tumor;
       ]
       @ opt_vcf with_mutect2
-        "mutect2" true (fun () -> Bfx.mutect2 ~normal ~tumor ())
+        "mutect2" true (fun () ->
+            let configuration =
+              if mouse_run then
+                Biokepi.Tools.Gatk.Configuration.Mutect2.default_without_cosmic
+              else
+                Biokepi.Tools.Gatk.Configuration.Mutect2.default
+            in
+            Bfx.mutect2 ~normal ~tumor ~configuration ())
       @ opt_vcf with_varscan
         "varscan" true (fun () -> Bfx.varscan_somatic ~normal ~tumor ())
       @ opt_vcf with_somaticsniper

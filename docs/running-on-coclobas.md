@@ -54,11 +54,11 @@ export CLUSTER_MAX_NODES=15
 # Change the following only if you changed the zone during the initial setup
 export GCLOUD_ZONE="us-east1-c"
 
-# Configure
+# This will create a file called 'configuration.env'
 ./disco.sh configure
 ```
 
-**NOTE** You will need to edit this configuration file by hand, to point the
+**NOTE** You will need to edit the `configuration.env` file by hand, to point the
 `GATK_JAR_URL` and `MUTECT_JAR_URL` to the jar files of those programs,
 respectively, somewhere on a network that GCloud can reach. If you aren't using
 these programs in your workflows, you don't need to worry about this, but since
@@ -102,10 +102,10 @@ Next, we want to start all the services and mount the storage space:
 
 You should now be in a screen session with four windows.
 
-- `Ketrew-server`
-- `Coclobas-server`
-- `Sudo-tlstunnel`
-- `bash`
+- 0: `Ketrew-server`
+- 1: `Coclobas-server`
+- 2: `Sudo-tlstunnel`
+- 3: `bash`
 
 You will be in the `bash` window. 
 *Note: you can move between `screen` windows with `C-a window-number` 

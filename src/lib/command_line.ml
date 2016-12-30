@@ -173,7 +173,11 @@ let pipeline ~biokepi_machine ?work_directory =
         parse_input_files normal_sample_files ~kind:"normal"
       in
       let tumor_inputs = parse_input_files tumor_sample_files ~kind:"tumor" in
-      let rna_inputs = parse_input_files rna_sample_files ~kind:"rna" in
+      let rna_inputs =
+        match rna_sample_files with
+        | [] -> None
+        | _ :: _ ->
+          Some (parse_input_files rna_sample_files ~kind:"rna") in
       let email_options =
         match
           to_email, from_email, mailgun_domain_name, mailgun_api_key with
@@ -190,7 +194,7 @@ let pipeline ~biokepi_machine ?work_directory =
       in
       let params =
         Pipeline.Parameters.make experiment_name
-          ~normal_inputs ~tumor_inputs ~rna_inputs
+          ~normal_inputs ~tumor_inputs ?rna_inputs
           ~bedfile
           ~mouse_run
           ~reference_build

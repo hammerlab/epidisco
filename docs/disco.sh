@@ -139,7 +139,7 @@ setup-docker () {
     local path="`( cd \"$path\" && pwd )`"
     local script="$path/${0##*/}"
     apt-get install -y docker.io
-    docker pull hammerlab/coclobas
+    docker pull hammerlab/coclobas:with-ketrew-300
     mkdir -p /tmp/coclo
     chmod 777 /tmp/coclo
     cp configuration.env /tmp/coclo
@@ -156,7 +156,7 @@ enter-docker () {
     echo "cd to /coclo to get access to your config and disco.sh"
     echo "...entering the Docker!"
     docker run -it -p 443:443 -v /tmp/coclo:/coclo \
-           --privileged hammerlab/coclobas bash
+           --privileged hammerlab/coclobas:with-ketrew-300 bash
 }
 
 ###########################
@@ -168,8 +168,6 @@ cluster-status () {
 }
 
 install-epidisco () {
-    opam pin add --yes ketrew 3.0.0
-    opam reinstall ketrew --yes
     opam pin add --yes biokepi "https://github.com/hammerlab/biokepi.git"
     opam pin add --yes epidisco "https://github.com/hammerlab/epidisco.git"
 }

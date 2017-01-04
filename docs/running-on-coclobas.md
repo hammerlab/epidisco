@@ -147,8 +147,8 @@ done with `./disco.sh submit-test`).
 
 ```shell
 source configuration.env
-KETREW_CONFIGURATION=_kclient_config/configuration.ml \
-    DREAM=https://storage.googleapis.com/dream-challenge \
+KETREW_CONFIGURATION=_kclient_config/configuration.ml; \
+    DREAM=https://storage.googleapis.com/dream-challenge; \
     ocaml run_pipeline.ml pipeline \
        --normal $DREAM/synthetic.challenge.set2.normal.bam \
        --tumor $DREAM/synthetic.challenge.set2.tumor.bam \

@@ -9,6 +9,8 @@ YARN, and even Kubernetes on Google Cloud (via
 [Coclobas](https://github.com/hammerlab/coclobas)) to schedule on many kinds of
 clusters.
 
+![Pipeline Overview](docs/pipeline.png)
+
 ## Usage
 
 Getting started with Epidisco is most easily done by setting up a GCloud cluster

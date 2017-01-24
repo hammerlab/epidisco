@@ -153,6 +153,8 @@ let pipeline ~biokepi_machine ?work_directory =
     (`With_mutect2 with_mutect2)
     (`With_varscan with_varscan)
     (`With_somaticsniper with_somaticsniper)
+    (`Vaxrank_include_mismatches_after_variant
+       vaxrank_include_mismatches_after_variant)
     (`Bedfile bedfile)
     (`Normal_sample normal_sample_files)
     (`Tumor_sample tumor_sample_files)
@@ -209,10 +211,10 @@ let pipeline ~biokepi_machine ?work_directory =
           ~with_somaticsniper
           ?picard_java_max_heap
           ?igv_url_server_prefix
+          ~vaxrank_include_mismatches_after_variant
       in
       run_pipeline ~biokepi_machine ~results_path ?work_directory
-        ~dry_run params
-        ?output_dot_to_png
+        ~dry_run params ?output_dot_to_png
 
 
 let args pipeline =
@@ -243,6 +245,12 @@ let args pipeline =
         value & flag & info [sprintf "with-%s" name]
           ~doc:(sprintf "Also run `%s`" name)
       ) in
+  let tool_cli_bool_option f toolname option =
+    pure f
+    $ Arg.(
+        value & flag & info [sprintf "%s-%s" toolname option]
+          ~doc:(sprintf "Run %s with option %s" toolname option)
+      ) in
   let bed_file_opt =
     pure (fun e -> `Bedfile e)
     $ Arg.(
@@ -270,6 +278,8 @@ let args pipeline =
   $ tool_option (fun e -> `With_mutect2 e) "mutect2"
   $ tool_option (fun e -> `With_varscan e) "varscan"
   $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
+  $ tool_cli_bool_option (fun e -> `Vaxrank_include_mismatches_after_variant e)
+    "vaxrank"  "ignore-mismatches-after-variant"
   $ bed_file_opt
   $ sample_files_arg "normal" (fun s -> `Normal_sample s)
   $ sample_files_arg "tumor" (fun s -> `Tumor_sample s)

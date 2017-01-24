@@ -43,7 +43,7 @@ let star_config =
     overhang_length = None;
   }
 
-let vaxrank_config =
+let vaxrank_config include_mismatches_after_variant =
   let open Biokepi.Tools.Vaxrank.Configuration in
   {name = "epidisco-40pep";
    vaccine_peptide_length = 25;
@@ -53,6 +53,7 @@ let vaxrank_config =
    min_mapping_quality = 1;
    min_variant_sequence_coverage = 1;
    min_alt_rna_reads = 3;
+   include_mismatches_after_variant;
    use_duplicate_reads = false;
    drop_secondary_alignments = false;
    mhc_epitope_lengths = [8; 9; 10; 11];
@@ -99,6 +100,7 @@ module Parameters = struct
     rna_inputs: Biokepi.EDSL.Library.Input.t list option;    (* 0+ items *)
     picard_java_max_heap: string option;
     igv_url_server_prefix: string option;
+    vaxrank_include_mismatches_after_variant: bool [@default false];
   } [@@deriving show,make]
 
   let construct_run_name params =
@@ -447,8 +449,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       >>= fun {rna_bam; _} ->
       mhc_alleles
       >>= fun alleles ->
+      let configuration =
+        vaxrank_config parameters.vaxrank_include_mismatches_after_variant in
       return (
-        Bfx.vaxrank ~configuration:vaxrank_config somatic_vcfs rna_bam
+        Bfx.vaxrank ~configuration somatic_vcfs rna_bam
           `NetMHCcons alleles
         |> Bfx.save "Vaxrank"
       ) in

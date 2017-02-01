@@ -170,6 +170,7 @@ let pipeline ~biokepi_machine ?work_directory =
     (`From_email from_email)
     (`To_email to_email)
     (`Igv_url_server_prefix igv_url_server_prefix)
+    (`Leave_input_bams_alone leave_input_bams_alone)
     ->
       let normal_inputs =
         parse_input_files normal_sample_files ~kind:"normal"
@@ -212,12 +213,49 @@ let pipeline ~biokepi_machine ?work_directory =
           ?picard_java_max_heap
           ?igv_url_server_prefix
           ~vaxrank_include_mismatches_after_variant
+          ?leave_input_bams_alone
       in
       run_pipeline ~biokepi_machine ~results_path ?work_directory
         ~dry_run params ?output_dot_to_png
 
 
-let args pipeline =
+let tool_args transform_term =
+  let open Cmdliner in
+  let open Cmdliner.Term in
+  let tool_option f name =
+    pure f
+    $ Arg.(
+        value & flag & info [sprintf "with-%s" name]
+          ~doc:(sprintf "Also run `%s`" name)) in
+  let tool_cli_bool_option f toolname option =
+    pure f
+    $ Arg.(
+        value & flag & info [sprintf "%s-%s" toolname option]
+          ~doc:(sprintf "Run %s with option %s" toolname option)
+      ) in
+  let bed_file_opt =
+    pure (fun e -> `Bedfile e)
+    $ Arg.(
+        let doc =
+          "Run bedtools intersect on VCFs with the given bed file. \
+           file://... or http(s)://..." in
+        value
+        & opt (some string) None
+        & info ["filter-vcfs-to-region-with"] ~doc) in
+  transform_term
+  $ tool_option (fun e -> `With_seq2hla e) "seq2hla"
+  $ tool_option (fun e -> `With_optitype_normal e) "optitype-normal"
+  $ tool_option (fun e -> `With_optitype_tumor e) "optitype-tumor"
+  $ tool_option (fun e -> `With_optitype_rna e) "optitype-rna"
+  $ tool_option (fun e -> `With_mutect2 e) "mutect2"
+  $ tool_option (fun e -> `With_varscan e) "varscan"
+  $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
+  $ tool_cli_bool_option (fun e -> `Vaxrank_include_mismatches_after_variant e)
+    "vaxrank"  "ignore-mismatches-after-variant"
+  $ bed_file_opt
+
+
+let sample_args transform_term =
   let open Cmdliner in
   let open Cmdliner.Term in
   let sample_files_arg ?(req = true) option_name f =
@@ -239,27 +277,17 @@ let args pipeline =
        then required & opt (some (list string)) None & inf
        else value & opt (list string) [] & inf))
   in
-  let tool_option f name =
-    pure f
-    $ Arg.(
-        value & flag & info [sprintf "with-%s" name]
-          ~doc:(sprintf "Also run `%s`" name)
-      ) in
-  let tool_cli_bool_option f toolname option =
-    pure f
-    $ Arg.(
-        value & flag & info [sprintf "%s-%s" toolname option]
-          ~doc:(sprintf "Run %s with option %s" toolname option)
-      ) in
-  let bed_file_opt =
-    pure (fun e -> `Bedfile e)
-    $ Arg.(
-        let doc =
-          "Run bedtools intersect on VCFs with the given bed file. \
-           file://... or http(s)://..." in
-        value
-        & opt (some string) None
-        & info ["filter-vcfs-to-region-with"] ~doc) in
+  transform_term
+  $ sample_files_arg "normal" (fun s -> `Normal_sample s)
+  $ sample_files_arg "tumor" (fun s -> `Tumor_sample s)
+  $ sample_files_arg ~req:false "rna" (fun s -> `Rna_sample s)
+
+let args pipeline =
+  let open Cmdliner in
+  let open Cmdliner.Term in
+  let ( <.> ) a b =
+    b a
+  in
   app pipeline begin
     pure (fun b -> `Dry_run b)
     $ Arg.(value & flag & info ["dry-run"] ~doc:"Dry-run; do not submit")
@@ -268,22 +296,10 @@ let args pipeline =
     pure (fun b -> `Mouse_run b)
     $ Arg.(
         value & flag & info ["mouse-run"]
-          ~doc:"Mouse-run; use mouse-specific config (no COSMIC)"
-      )
+          ~doc:"Mouse-run; use mouse-specific config (no COSMIC)")
   end
-  $ tool_option (fun e -> `With_seq2hla e) "seq2hla"
-  $ tool_option (fun e -> `With_optitype_normal e) "optitype-normal"
-  $ tool_option (fun e -> `With_optitype_tumor e) "optitype-tumor"
-  $ tool_option (fun e -> `With_optitype_rna e) "optitype-rna"
-  $ tool_option (fun e -> `With_mutect2 e) "mutect2"
-  $ tool_option (fun e -> `With_varscan e) "varscan"
-  $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
-  $ tool_cli_bool_option (fun e -> `Vaxrank_include_mismatches_after_variant e)
-    "vaxrank"  "ignore-mismatches-after-variant"
-  $ bed_file_opt
-  $ sample_files_arg "normal" (fun s -> `Normal_sample s)
-  $ sample_files_arg "tumor" (fun s -> `Tumor_sample s)
-  $ sample_files_arg ~req:false "rna" (fun s -> `Rna_sample s)
+  <.> tool_args
+  <.> sample_args
   $ begin
     pure (fun s -> `Ref s)
     $ Arg.(
@@ -368,6 +384,13 @@ let args pipeline =
         & info ["igv-url-server-prefix"]
           ~doc:"URL with which to prefix IGV.xml paths."
           ~docv:"IGV_URL_SERVER_PREFIX")
+  end
+  $ begin
+    pure (fun b -> `Leave_input_bams_alone b)
+    $ Arg.(
+        value & opt (some bool) None
+        & info ["leave-input-bams-alone"]
+          ~doc:"Don't realign input BAMs.")
   end
 
 

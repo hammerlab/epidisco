@@ -101,6 +101,7 @@ module Parameters = struct
     picard_java_max_heap: string option;
     igv_url_server_prefix: string option;
     vaxrank_include_mismatches_after_variant: bool [@default false];
+    leave_input_bams_alone: bool [@default false];
   } [@@deriving show,make]
 
   let construct_run_name params =
@@ -184,16 +185,36 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
+      let is_a_bam =
+        (fun s -> match s with
+          | `Bam _ when parameters.Parameters.leave_input_bams_alone -> true
+          | _ -> false
+        ) in
+      let invert f = fun s -> not (f s) in
       let list_of_inputs = Stdlib.bwa_mem_opt_inputs sample in
-      List.map list_of_inputs ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
-      |> Bfx.list
-      |> Bfx.merge_bams
-      |> Bfx.picard_mark_duplicates
-        ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
+      let aligned_bam =
+        (* We filter here in case we don't want to realign BAMs passed into the
+           pipeline. We rejoin the BAMs that we filtered out, below. *)
+        List.filter ~f:(invert is_a_bam) list_of_inputs
+        |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
+        |> Bfx.list
+        |> Bfx.merge_bams
+        |> Bfx.picard_mark_duplicates
+          ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
+      in
+      let given_bams =
+        List.filter ~f:(is_a_bam) list_of_inputs
+        |> List.map ~f:Stdlib.bam_of_input_exn
+        |> Bfx.list in
+      (* Here we rejoin the BAMs we (depending on the
+         parameters.leave_input_bams_alone flag) didn't realign with the ones we
+         did. *)
+      Bfx.merge_bams aligned_bam given_bams
     in
     List.map samples ~f:sample_to_bam
     |> Bfx.list
     |> Bfx.merge_bams
+
 
 
   let process_dna_bam_pair ~normal ~tumor =
@@ -407,9 +428,9 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let rna_samples =
       Option.map ~f:(List.map ~f:Stdlib.fastq_of_input) parameters.rna_inputs in
     let normal_samples =
-        List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
+      List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
     let tumor_samples =
-        List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs in
+      List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs in
     let normal_bam, tumor_bam =
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in

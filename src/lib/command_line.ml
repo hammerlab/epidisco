@@ -102,14 +102,15 @@ let run_pipeline
 
 
 let pipeline ~biokepi_machine ?work_directory =
-  let parse_input_files files ~kind =
+  let parse_input_files files ~kind ~leave_input_bams_alone =
     let open Biokepi.EDSL.Library.Input in
     let parse_file file prefix =
       let file_type =
         let check = Filename.check_suffix file in
-        if check ".bam"                                then `Bam
-        else if (check ".fastq" || check ".fastq.gz")  then `Fastq
-        else                                                `Json
+        if (check ".bam" && leave_input_bams_alone)   then `Bam_no_realign
+        else if check ".bam"                          then `Bam
+        else if (check ".fastq" || check ".fastq.gz") then `Fastq
+        else                                               `Json
       in
       (*
         Beside serialized sample description files,
@@ -123,6 +124,12 @@ let pipeline ~biokepi_machine ?work_directory =
          ...
       *)
       match file_type with
+      | `Bam_no_realign -> begin
+          let sample_name =
+            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+          in
+          bam_sample ~sample_name ~how:`PE ~reference_build:"dontcare" file
+        end
       | `Bam -> begin
           let sample_name =
             prefix ^ "-" ^ Filename.(chop_extension file |> basename)
@@ -173,14 +180,18 @@ let pipeline ~biokepi_machine ?work_directory =
     (`Leave_input_bams_alone leave_input_bams_alone)
     ->
       let normal_inputs =
-        parse_input_files normal_sample_files ~kind:"normal"
+        parse_input_files
+          ~leave_input_bams_alone normal_sample_files ~kind:"normal"
       in
-      let tumor_inputs = parse_input_files tumor_sample_files ~kind:"tumor" in
+      let tumor_inputs =
+        parse_input_files
+          ~leave_input_bams_alone tumor_sample_files ~kind:"tumor" in
       let rna_inputs =
         match rna_sample_files with
         | [] -> None
         | _ :: _ ->
-          Some (parse_input_files rna_sample_files ~kind:"rna") in
+          Some (parse_input_files
+                  ~leave_input_bams_alone rna_sample_files ~kind:"rna") in
       let email_options =
         match
           to_email, from_email, mailgun_domain_name, mailgun_api_key with
@@ -213,7 +224,7 @@ let pipeline ~biokepi_machine ?work_directory =
           ?picard_java_max_heap
           ?igv_url_server_prefix
           ~vaxrank_include_mismatches_after_variant
-          ?leave_input_bams_alone
+          ~leave_input_bams_alone
       in
       run_pipeline ~biokepi_machine ~results_path ?work_directory
         ~dry_run params ?output_dot_to_png
@@ -263,8 +274,8 @@ let sample_args transform_term =
       sprintf
         "PATH/URI(s) to data files (BAM, FASTQ, FASTQ.gz) or serialized \
          sample description in JSON format for the %S sample. \
-         Use comma (,) as a delimiter to provide multiple data files \
-         and semi-colon (@) when describing paired-end FASTQ files."
+         Use a comma (,) as a delimiter to provide multiple data files \
+         and an ampersand (@) when describing paired-end FASTQ files."
         option_name
     in
     let inf =
@@ -285,9 +296,6 @@ let sample_args transform_term =
 let args pipeline =
   let open Cmdliner in
   let open Cmdliner.Term in
-  let ( <.> ) a b =
-    b a
-  in
   app pipeline begin
     pure (fun b -> `Dry_run b)
     $ Arg.(value & flag & info ["dry-run"] ~doc:"Dry-run; do not submit")
@@ -298,8 +306,8 @@ let args pipeline =
         value & flag & info ["mouse-run"]
           ~doc:"Mouse-run; use mouse-specific config (no COSMIC)")
   end
-  <.> tool_args
-  <.> sample_args
+  |> tool_args
+  |> sample_args
   $ begin
     pure (fun s -> `Ref s)
     $ Arg.(
@@ -388,7 +396,7 @@ let args pipeline =
   $ begin
     pure (fun b -> `Leave_input_bams_alone b)
     $ Arg.(
-        value & opt (some bool) None
+        value & opt bool false
         & info ["leave-input-bams-alone"]
           ~doc:"Don't realign input BAMs.")
   end

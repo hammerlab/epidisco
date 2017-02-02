@@ -118,9 +118,9 @@ module Parameters = struct
       reference_build;
     ]
 
-  (* To maximize sharing the run-directory depends only on the
-     experiement name (to allow the use to force a fresh one) and the
-     reference-build (since Biokepi does not track it yet in the filenames). *)
+  (* To maximize sharing the run-directory depends only on the experiment name
+     (to allow the use to force a fresh one) and the reference-build (since
+     Biokepi does not track it yet in the filenames). *)
   let construct_run_directory param =
     sprintf "%s-%s" param.experiment_name param.reference_build
 
@@ -143,9 +143,10 @@ module Parameters = struct
       | _, _ -> false
     in
     match t with
-    | Fastq { sample_name; files } ->
+    | Bam {bam_sample_name; _ } -> sprintf "Bam %s" bam_sample_name
+    | Fastq { fastq_sample_name; files } ->
       sprintf "%s, %s"
-        sample_name
+        fastq_sample_name
         begin match files with
         | [] -> "NONE"
         | [one] ->
@@ -185,31 +186,21 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
-      let is_a_bam =
-        (fun s -> match s with
-          | `Bam _ when parameters.Parameters.leave_input_bams_alone -> true
-          | _ -> false
-        ) in
-      let invert f = fun s -> not (f s) in
-      let list_of_inputs = Stdlib.bwa_mem_opt_inputs sample in
-      let aligned_bam =
-        (* We filter here in case we don't want to realign BAMs passed into the
-           pipeline. We rejoin the BAMs that we filtered out, below. *)
-        List.filter ~f:(invert is_a_bam) list_of_inputs
-        |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
-        |> Bfx.list
-        |> Bfx.merge_bams
-        |> Bfx.picard_mark_duplicates
-          ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
-      in
-      let given_bams =
-        List.filter ~f:(is_a_bam) list_of_inputs
-        |> List.map ~f:Stdlib.bam_of_input_exn
-        |> Bfx.list in
-      (* Here we rejoin the BAMs we (depending on the
-         parameters.leave_input_bams_alone flag) didn't realign with the ones we
-         did. *)
-      Bfx.merge_bams aligned_bam given_bams
+      let open Biokepi.EDSL.Library.Input in
+      match sample with
+      | Bam {bam_sample_name; path; how; sorting; reference_build} ->
+        Bfx.bam ?sorting ~sample_name:bam_sample_name
+          ~reference_build (Bfx.input_url path)
+      | sample ->
+        let aligned_bam =
+          Stdlib.bwa_mem_opt_inputs sample
+          |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
+          |> Bfx.list
+          |> Bfx.merge_bams
+          |> Bfx.picard_mark_duplicates
+            ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
+        in
+        aligned_bam
     in
     List.map samples ~f:sample_to_bam
     |> Bfx.list

@@ -101,6 +101,7 @@ module Parameters = struct
     picard_java_max_heap: string option;
     igv_url_server_prefix: string option;
     vaxrank_include_mismatches_after_variant: bool [@default false];
+    leave_input_bams_alone: bool [@default false];
   } [@@deriving show,make]
 
   let construct_run_name params =
@@ -117,9 +118,9 @@ module Parameters = struct
       reference_build;
     ]
 
-  (* To maximize sharing the run-directory depends only on the
-     experiement name (to allow the use to force a fresh one) and the
-     reference-build (since Biokepi does not track it yet in the filenames). *)
+  (* To maximize sharing the run-directory depends only on the experiment name
+     (to allow the use to force a fresh one) and the reference-build (since
+     Biokepi does not track it yet in the filenames). *)
   let construct_run_directory param =
     sprintf "%s-%s" param.experiment_name param.reference_build
 
@@ -142,9 +143,10 @@ module Parameters = struct
       | _, _ -> false
     in
     match t with
-    | Fastq { sample_name; files } ->
+    | Bam {bam_sample_name; _ } -> sprintf "Bam %s" bam_sample_name
+    | Fastq { fastq_sample_name; files } ->
       sprintf "%s, %s"
-        sample_name
+        fastq_sample_name
         begin match files with
         | [] -> "NONE"
         | [one] ->
@@ -184,16 +186,26 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
-      let list_of_inputs = Stdlib.bwa_mem_opt_inputs sample in
-      List.map list_of_inputs ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
-      |> Bfx.list
-      |> Bfx.merge_bams
-      |> Bfx.picard_mark_duplicates
-        ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
+      let open Biokepi.EDSL.Library.Input in
+      match sample with
+      | Bam {bam_sample_name; path; how; sorting; reference_build} ->
+        Bfx.bam ?sorting ~sample_name:bam_sample_name
+          ~reference_build (Bfx.input_url path)
+      | sample ->
+        let aligned_bam =
+          Stdlib.bwa_mem_opt_inputs sample
+          |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
+          |> Bfx.list
+          |> Bfx.merge_bams
+          |> Bfx.picard_mark_duplicates
+            ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
+        in
+        aligned_bam
     in
     List.map samples ~f:sample_to_bam
     |> Bfx.list
     |> Bfx.merge_bams
+
 
 
   let process_dna_bam_pair ~normal ~tumor =
@@ -407,9 +419,9 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     let rna_samples =
       Option.map ~f:(List.map ~f:Stdlib.fastq_of_input) parameters.rna_inputs in
     let normal_samples =
-        List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
+      List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
     let tumor_samples =
-        List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs in
+      List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs in
     let normal_bam, tumor_bam =
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in

@@ -102,6 +102,7 @@ module Parameters = struct
     igv_url_server_prefix: string option;
     vaxrank_include_mismatches_after_variant: bool [@default false];
     leave_input_bams_alone: bool [@default false];
+    use_bwa_mem_opt: bool [@default true];
   } [@@deriving show,make]
 
   let construct_run_name params =
@@ -192,10 +193,18 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         Bfx.bam ?sorting ~sample_name:bam_sample_name
           ~reference_build (Bfx.input_url path)
       | sample ->
+        let bwa_mem_of_input_sample input_sample =
+          match parameters.Parameters.use_bwa_mem_opt with
+          | true ->
+            Stdlib.bwa_mem_opt_inputs input_sample
+            |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
+            |> Bfx.list
+          | false ->
+            Stdlib.fastq_of_input input_sample
+            |> Bfx.list_map ~f:(Bfx.lambda (Bfx.bwa_mem ~reference_build ?configuration:None))
+        in
         let aligned_bam =
-          Stdlib.bwa_mem_opt_inputs sample
-          |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
-          |> Bfx.list
+          bwa_mem_of_input_sample sample
           |> Bfx.merge_bams
           |> Bfx.picard_mark_duplicates
             ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)

@@ -178,6 +178,7 @@ let pipeline ~biokepi_machine ?work_directory =
     (`To_email to_email)
     (`Igv_url_server_prefix igv_url_server_prefix)
     (`Leave_input_bams_alone leave_input_bams_alone)
+    (`Use_bwa_mem_opt use_bwa_mem_opt)
     ->
       let normal_inputs =
         parse_input_files
@@ -208,6 +209,7 @@ let pipeline ~biokepi_machine ?work_directory =
       in
       let params =
         Pipeline.Parameters.make experiment_name
+          ~use_bwa_mem_opt
           ~normal_inputs ~tumor_inputs ?rna_inputs
           ~bedfile
           ~mouse_run
@@ -399,6 +401,14 @@ let args pipeline =
         value & opt bool false
         & info ["leave-input-bams-alone"]
           ~doc:"Don't realign input BAMs.")
+  end
+  $ begin
+    pure (fun b -> `Use_bwa_mem_opt b)
+    $ Arg.(
+        value & opt bool true
+        & info ["use-bwa-mem-opt"]
+          ~doc:"Use the optimized workflow-node for bwa-mem \
+                (i.e. bam2fq + align + sort + to-bam).")
   end
 
 

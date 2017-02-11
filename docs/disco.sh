@@ -140,22 +140,22 @@ setup-docker () {
     local script="$path/${0##*/}"
     apt-get install -y docker.io
     docker pull hammerlab/coclobas:with-ketrew-300
-    mkdir -p /tmp/coclo
-    chmod 777 /tmp/coclo
-    cp configuration.env /tmp/coclo
-    cp $script /tmp/coclo
-    chmod -R 777 /tmp/coclo
-    echo "Copied configuration.env and disco.sh to /tmp/coclo"
+    mkdir -p /coclo
+    chmod 777 /coclo
+    cp configuration.env /coclo
+    cp $script /coclo
+    chmod -R 777 /coclo
+    echo "Copied configuration.env and disco.sh to /coclo"
 }
 
 # meant to be sudo-executed
 # - `--privileged` is for NFS mounting
 # - `-p 443:443` is to pass the port 443 to the container
 enter-docker () {
-    echo "Mounting local /tmp/coclo to Docker's /coclo"
+    echo "Mounting local /coclo to Docker's /coclo"
     echo "cd to /coclo to get access to your config and disco.sh"
     echo "...entering the Docker!"
-    docker run -it -p 443:443 -v /tmp/coclo:/coclo \
+    docker run -it -p 443:443 -v /coclo:/coclo \
            --privileged hammerlab/coclobas:with-ketrew-300 bash
 }
 

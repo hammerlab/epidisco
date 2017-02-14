@@ -31,7 +31,7 @@ let run_pipeline
     ~results_path
     ?work_directory
     params =
-  let run_name = Pipeline.Parameters.construct_run_name params in
+  let run_name = Parameters.construct_run_name params in
   let module Mem = Save_result.Mem () in
   let module P2json = Pipeline.Full(Extended_edsl.To_json_with_mem(Mem)) in
   let (_ : Yojson.Basic.json) = P2json.run params in
@@ -66,7 +66,7 @@ let run_pipeline
     match work_directory with
     | None  ->
       Biokepi.Machine.work_dir biokepi_machine //
-      Pipeline.Parameters.construct_run_directory params
+      Parameters.construct_run_directory params
     | Some w -> w
   in
   Mem.save_dot_content dot_content;
@@ -86,7 +86,7 @@ let run_pipeline
     Ketrew_pipeline_1.run params
     |> Qc.EDSL.Extended_file_spec.get_unit_workflow
       ~name:(sprintf "Epidisco: %s %s"
-               params.Pipeline.Parameters.experiment_name run_name)
+               params.Parameters.experiment_name run_name)
   in
   begin match dry_run with
   | true ->
@@ -96,7 +96,7 @@ let run_pipeline
   | false ->
     printf "Submitting to Ketrew...\n%!";
     Ketrew.Client.submit_workflow workflow_1
-      ~add_tags:[params.Pipeline.Parameters.experiment_name; run_name;
+      ~add_tags:[params.Parameters.experiment_name; run_name;
                  "From-" ^ Ketrew.EDSL.node_id workflow_1]
   end
 
@@ -208,7 +208,7 @@ let pipeline ~biokepi_machine ?work_directory =
                     are specified, then they all must be."
       in
       let params =
-        Pipeline.Parameters.make experiment_name
+        Parameters.make experiment_name
           ~use_bwa_mem_opt
           ~normal_inputs ~tumor_inputs ?rna_inputs
           ~bedfile

@@ -11,11 +11,23 @@ clusters.
 
 ![Pipeline Overview](docs/pipeline.png)
 
+## Note on Multiple Samples
+
+You can pass multiple samples into Epidisco, but they will be merged into one
+sample (tumor, normal, or tumor RNA) after the alignment & mark duplicates
+step. This option to process multiple samples should only be used to e.g. pass
+data from biological replicates (or samples you wish to treat as such) into the
+pipeline, which fundamentally operates on a tumor, normal, and tumor RNA sample
+set.
+
 ## Usage
 
 Getting started with Epidisco is most easily done by setting up a GCloud cluster
 following [these instructions](./docs/), which also cover how to submit an
 Epidisco job.
+
+Once compiled, `epidisco --help` provides extensive instructions on how to
+invoke the pipeline.
 
 ### Advanced Usage
 

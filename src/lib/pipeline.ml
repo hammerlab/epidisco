@@ -39,7 +39,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     |> Bfx.merge_bams
 
 
-
   let process_dna_bam_pair ~normal ~tumor =
     let pair =
       Bfx.pair normal tumor

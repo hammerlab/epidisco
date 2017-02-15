@@ -272,8 +272,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       match rna_samples with
       | None -> None
       | Some rnas ->
-        Some (rna_pipeline rnas
-                ~reference_build ~parameters)
+        Some (rna_pipeline rnas ~reference_build ~parameters)
     in
     let vcfs =
       match parameters.reference_build with

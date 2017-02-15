@@ -140,12 +140,18 @@ let pipeline ~biokepi_machine ?work_directory =
           fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
         end
       | `Fastq ->  begin
-          let sample_name =
-            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
-          in
           match (String.split ~on:(`Character '@') file) with
-          | [ pair1; pair2; ] -> fastq_sample ~sample_name [pe pair1 pair2]
-          | [ single_end; ] -> fastq_sample ~sample_name [se single_end]
+          | [ pair1; pair2; ] ->
+            let sample_name =
+              let chop f = Filename.(chop_extension f |> basename) in
+              sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
+            in
+            fastq_sample ~sample_name [pe pair1 pair2]
+          | [ single_end; ] ->
+            let sample_name =
+              sprintf "%s-%s" prefix Filename.(chop_extension file |> basename)
+            in
+            fastq_sample ~sample_name [se single_end]
           | _ -> failwith "Couldn't parse FASTQ path."
         end
       | `Json ->
@@ -448,7 +454,7 @@ let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
       `P "Isaac Hodes <isaachodes@gmail.com>"; `Noblank;
       `S "BUGS";
       `P "Browse and report new issues at"; `Noblank;
-      `P "<https://github.com/hammerlab/epidisco>.";] in
+      `P "<https://github.com/hammerlab/epidisco>."; ] in
   let info = Term.(info cmd ~man ~doc:"The Epidisco Pipeline") in
   let term = Term.(pure (pipeline ~biokepi_machine ?work_directory)) |> args in
   (term, info)

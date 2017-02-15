@@ -313,7 +313,7 @@ let args pipeline =
     pure (fun b -> `Mouse_run b)
     $ Arg.(
         value & flag & info ["without-cosmic"]
-          ~doc:"Mouse-run; use mouse-specific config (no COSMIC)")
+          ~doc:"Don't pass cosmic to Mutect (no COSMIC)")
   end
   |> tool_args
   |> sample_args

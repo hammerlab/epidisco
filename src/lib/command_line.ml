@@ -31,7 +31,7 @@ let run_pipeline
     ~results_path
     ?work_directory
     params =
-  let run_name = Pipeline.Parameters.construct_run_name params in
+  let run_name = Parameters.construct_run_name params in
   let module Mem = Save_result.Mem () in
   let module P2json = Pipeline.Full(Extended_edsl.To_json_with_mem(Mem)) in
   let (_ : Yojson.Basic.json) = P2json.run params in
@@ -66,7 +66,7 @@ let run_pipeline
     match work_directory with
     | None  ->
       Biokepi.Machine.work_dir biokepi_machine //
-      Pipeline.Parameters.construct_run_directory params
+      Parameters.construct_run_directory params
     | Some w -> w
   in
   Mem.save_dot_content dot_content;
@@ -86,7 +86,7 @@ let run_pipeline
     Ketrew_pipeline_1.run params
     |> Qc.EDSL.Extended_file_spec.get_unit_workflow
       ~name:(sprintf "Epidisco: %s %s"
-               params.Pipeline.Parameters.experiment_name run_name)
+               params.Parameters.experiment_name run_name)
   in
   begin match dry_run with
   | true ->
@@ -96,7 +96,7 @@ let run_pipeline
   | false ->
     printf "Submitting to Ketrew...\n%!";
     Ketrew.Client.submit_workflow workflow_1
-      ~add_tags:[params.Pipeline.Parameters.experiment_name; run_name;
+      ~add_tags:[params.Parameters.experiment_name; run_name;
                  "From-" ^ Ketrew.EDSL.node_id workflow_1]
   end
 
@@ -112,11 +112,14 @@ let pipeline ~biokepi_machine ?work_directory =
         else if (check ".fastq" || check ".fastq.gz") then `Fastq
         else                                               `Json
       in
-      (*
-        Beside serialized sample description files,
-        we also would like to capture direct paths to the BAMs/FASTQs
-        to make it easier for the user to submit samples.
-        Examples
+      (* Beside serialized sample description files, we also would like to
+         capture direct paths to the BAMs/FASTQs to make it easier for the user
+         to submit samples. Each comma-separated BAM or FASTQ (paired or
+         single-ended) will be treated as an individual sample before being
+         merged into the single tumor/normal the rest of the pipeline deals
+         with.
+
+         Examples
          - JSON file: /path/to/sample.json
          - BAM file: https://url.to/my.bam
          - Single-end FASTQ: /path/to/single.fastq.gz,..
@@ -137,12 +140,18 @@ let pipeline ~biokepi_machine ?work_directory =
           fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
         end
       | `Fastq ->  begin
-          let sample_name =
-            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
-          in
           match (String.split ~on:(`Character '@') file) with
-          | [ pair1; pair2; ] -> fastq_sample ~sample_name [pe pair1 pair2]
-          | [ single_end; ] -> fastq_sample ~sample_name [se single_end]
+          | [ pair1; pair2; ] ->
+            let sample_name =
+              let chop f = Filename.(chop_extension f |> basename) in
+              sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
+            in
+            fastq_sample ~sample_name [pe pair1 pair2]
+          | [ single_end; ] ->
+            let sample_name =
+              sprintf "%s-%s" prefix Filename.(chop_extension file |> basename)
+            in
+            fastq_sample ~sample_name [se single_end]
           | _ -> failwith "Couldn't parse FASTQ path."
         end
       | `Json ->
@@ -208,7 +217,7 @@ let pipeline ~biokepi_machine ?work_directory =
                     are specified, then they all must be."
       in
       let params =
-        Pipeline.Parameters.make experiment_name
+        Parameters.make experiment_name
           ~use_bwa_mem_opt
           ~normal_inputs ~tumor_inputs ?rna_inputs
           ~bedfile
@@ -239,12 +248,14 @@ let tool_args transform_term =
     pure f
     $ Arg.(
         value & flag & info [sprintf "with-%s" name]
-          ~doc:(sprintf "Also run `%s`" name)) in
+          ~doc:(sprintf "Also run `%s`" name)
+          ~docs:"OTHER TOOLS") in
   let tool_cli_bool_option f toolname option =
     pure f
     $ Arg.(
         value & flag & info [sprintf "%s-%s" toolname option]
           ~doc:(sprintf "Run %s with option %s" toolname option)
+          ~docs:"OTHER TOOLS"
       ) in
   let bed_file_opt =
     pure (fun e -> `Bedfile e)
@@ -274,39 +285,35 @@ let sample_args transform_term =
   let sample_files_arg ?(req = true) option_name f =
     let doc =
       sprintf
-        "PATH/URI(s) to data files (BAM, FASTQ, FASTQ.gz) or serialized \
-         sample description in JSON format for the %S sample. \
-         Use a comma (,) as a delimiter to provide multiple data files \
-         and an ampersand (@) when describing paired-end FASTQ files."
+        "Path/URI(s) to data files (BAM, FASTQ, FASTQ.gz) or serialized
+         sample description in JSON format for the %S sample."
         option_name
     in
-    let inf =
-      Arg.info [option_name] ~doc ~docv:"PATH[,PATH2,[PATH3_1@PATH3_2],...]"
-    in
+    let inf = Arg.info [option_name] ~doc ~docs:"SAMPLES"
+        ~docv:"PATH[,PATH2,[PATH3_1@PATH3_2],...]" in
     pure f
-    $
-    Arg.(
-      (if req
-       then required & opt (some (list string)) None & inf
-       else value & opt (list string) [] & inf))
-  in
+    $ Arg.(if req
+           then required & opt (some (list string)) None & inf
+           else value & opt (list string) [] & inf) in
   transform_term
   $ sample_files_arg "normal" (fun s -> `Normal_sample s)
   $ sample_files_arg "tumor" (fun s -> `Tumor_sample s)
   $ sample_files_arg ~req:false "rna" (fun s -> `Rna_sample s)
+
 
 let args pipeline =
   let open Cmdliner in
   let open Cmdliner.Term in
   app pipeline begin
     pure (fun b -> `Dry_run b)
-    $ Arg.(value & flag & info ["dry-run"] ~doc:"Dry-run; do not submit")
+    $ Arg.(value & flag & info ["dry-run"]
+             ~doc:"Dry-run; does not submit the pipeline to a Ketrew server.")
   end
   $ begin
     pure (fun b -> `Mouse_run b)
     $ Arg.(
-        value & flag & info ["mouse-run"]
-          ~doc:"Mouse-run; use mouse-specific config (no COSMIC)")
+        value & flag & info ["without-cosmic"]
+          ~doc:"Don't pass cosmic to Mutect (no COSMIC)")
   end
   |> tool_args
   |> sample_args
@@ -336,9 +343,10 @@ let args pipeline =
     $ Arg.(
         value & opt (list ~sep:',' string |> some) None
         & info ["mhc-alleles"]
-          ~doc:"Run pipeline with the given list of MHC alleles \
-                in lieu of those generated by Seq2Hla or OptiType: $(docv)"
-          ~docv:"LIST")
+          ~doc:"Run epitope binding prediction pipeline with the given list \
+                of MHC alleles in lieu of those generated by Seq2Hla or \
+                OptiType."
+          ~docv:"ALLELE1,ALLELE2,..")
   end
   $ begin
     pure (fun s -> `Picard_java_max_heap s)
@@ -356,44 +364,53 @@ let args pipeline =
           ~doc:"Give a name to the run(s)" ~docv:"NAME")
   end
   $ begin
+    let var_name = "MAILGUN_API_KEY" in
     pure (fun s -> `Mailgun_api_key s)
     $ Arg.(
         value & opt (some string) None
         & info ["mailgun-api-key"]
           ~doc:"Mailgun API key, used for notification emails."
-          ~docv:"MAILGUN_API_KEY")
+          ~docv:var_name ~env:(env_var var_name)
+          ~docs:"MAILGUN NOTIFICATIONS")
   end
   $ begin
+    let var_name = "MAILGUN_DOMAIN" in
     pure (fun s -> `Mailgun_domain s)
     $ Arg.(
         value & opt (some string) None
         & info ["mailgun-domain"]
           ~doc:"Mailgun domain, used for notification emails."
-          ~docv:"MAILGUN_DOMAIN")
+          ~docv:var_name ~env:(env_var var_name)
+          ~docs:"MAILGUN NOTIFICATIONS")
   end
   $ begin
+    let var_name = "FROM_EMAIL" in
     pure (fun s -> `From_email s)
     $ Arg.(
         value & opt (some string) None
         & info ["from-email"]
           ~doc:"Email address used for notification emails."
-          ~docv:"FROM_EMAIL")
+          ~docv:var_name ~env:(env_var var_name)
+          ~docs:"MAILGUN NOTIFICATIONS")
   end
   $ begin
+    let var_name = "TO_EMAIL" in
     pure (fun s -> `To_email s)
     $ Arg.(
         value & opt (some string) None
         & info ["to-email"]
           ~doc:"Email address to send notification emails to."
-          ~docv:"TO_EMAIL")
+          ~docv:var_name ~env:(env_var var_name)
+          ~docs:"MAILGUN NOTIFICATIONS")
   end
   $ begin
+    let var_name = "IGV_URL_SERVER_PREFIX" in
     pure (fun s -> `Igv_url_server_prefix s)
     $ Arg.(
         value & opt (some string) None
         & info ["igv-url-server-prefix"]
-          ~doc:"URL with which to prefix IGV.xml paths."
-          ~docv:"IGV_URL_SERVER_PREFIX")
+          ~doc:"URL with which to prefix igvxml paths."
+          ~docv:var_name ~env:(env_var var_name))
   end
   $ begin
     pure (fun b -> `Leave_input_bams_alone b)
@@ -412,9 +429,33 @@ let args pipeline =
   end
 
 
-let pipeline_term ~biokepi_machine ?work_directory () =
+let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
   let open Cmdliner in
-  let info = Term.(info "pipeline" ~doc:"The Epidisco Pipeline") in
+  let man =
+    [ `S "SAMPLES";
+      `P "The sample data (tumor DNA, normal DNA, and, optionally, tumor RNA) \
+          to be passed into the pipeline.";
+      `P "Use a comma (,) as a delimiter to provide multiple data files
+         and an ampersand (@) when describing paired-end FASTQ files.";
+      `P "Examples"; `Noblank;
+      `P "- JSON file: file://path/to/sample.json"; `Noblank;
+      `P "- BAM file: https://url.to/my.bam"; `Noblank;
+      `P "- Single-end FASTQ: /path/to/single.fastq.gz,.."; `Noblank;
+      `P "- Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..";
+      `P "Each comma-separated BAM or FASTQ (paired or single-ended) will be \
+          treated as an individual sample before being merged into the single \
+          tumor/normal/RNA sample the rest of the pipeline deals with.";
+      `S "OPTIONS";
+      `S "OTHER TOOLS";
+      `S "MAILGUN NOTIFICATIONS";
+      `S "ENVIRONMENT VARIABLES";
+      `S "AUTHORS";
+      `P "Sebastien Mondet <seb@mondet.org>"; `Noblank;
+      `P "Isaac Hodes <isaachodes@gmail.com>"; `Noblank;
+      `S "BUGS";
+      `P "Browse and report new issues at"; `Noblank;
+      `P "<https://github.com/hammerlab/epidisco>."; ] in
+  let info = Term.(info cmd ~man ~doc:"The Epidisco Pipeline") in
   let term = Term.(pure (pipeline ~biokepi_machine ?work_directory)) |> args in
   (term, info)
 
@@ -422,21 +463,9 @@ let pipeline_term ~biokepi_machine ?work_directory () =
 let main
     ~biokepi_machine ?work_directory () =
   let version = Metadata.version |> Lazy.force in
-  let pipe = pipeline_term ~biokepi_machine ?work_directory () in
+  let pipe = pipeline_term ~biokepi_machine ?work_directory ~version Sys.argv.(0) in
   let open Cmdliner in
-  let default_cmd =
-    let doc = "Run the Epidisco pipeline." in
-    let man = [
-      `S "AUTHORS";
-      `P "Sebastien Mondet <seb@mondet.org>"; `Noblank;
-      `P "Isaac Hodes <isaachodes@gmail.com>"; `Noblank;
-      `S "BUGS";
-      `P "Browse and report new issues at"; `Noblank;
-      `P "<https://github.com/hammerlab/epidisco>.";
-    ] in
-    Term.(ret (pure (`Help (`Plain, None)))),
-    Term.info Sys.argv.(0) ~version ~doc ~man in
-  match Term.eval_choice default_cmd (pipe :: []) with
+  match Term.eval pipe with
   | `Ok f -> f
   | `Error _ -> exit 1
   | `Version | `Help -> exit 0

@@ -5,9 +5,11 @@ let (//) = Filename.concat
 
 
 (** Makes the below equivalent.
-let x = canonicalize "/dsde/deds///desd//de/des/"
+
+{[let x = canonicalize "/dsde/deds///desd//de/des/"
 let y = canonicalize "./dsde/deds///desd//de/des/"
-let z = canonicalize "../../dsde/deds///desd//de/des/" *)
+let z = canonicalize "../../dsde/deds///desd//de/des/"
+]} *)
 let canonicalize path =
   let rec build acc dir =
     match Filename.dirname dir with

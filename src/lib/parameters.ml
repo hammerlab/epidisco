@@ -16,16 +16,16 @@ type t = {
   with_optitype_rna: bool [@default false];
   email_options: Qc.EDSL.email_options option;
   bedfile: string option [@default None];
+  reference_build: string;
+  normal_inputs: Biokepi.EDSL.Library.Input.t list; (* 1+ items *)
+  tumor_inputs: Biokepi.EDSL.Library.Input.t list;  (* 1+ items *)
+  rna_inputs: Biokepi.EDSL.Library.Input.t list option;    (* 0+ items *)
+  picard_java_max_heap: string option;
+  igv_url_server_prefix: string option;
+  vaxrank_include_mismatches_after_variant: bool [@default false];
+  leave_input_bams_alone: bool [@default false];
+  use_bwa_mem_opt: bool [@default true];
   experiment_name: string [@main];
-        reference_build: string;
-        normal_inputs: Biokepi.EDSL.Library.Input.t list; (* 1+ items *)
-        tumor_inputs: Biokepi.EDSL.Library.Input.t list;  (* 1+ items *)
-        rna_inputs: Biokepi.EDSL.Library.Input.t list option;    (* 0+ items *)
-        picard_java_max_heap: string option;
-        igv_url_server_prefix: string option;
-        vaxrank_include_mismatches_after_variant: bool [@default false];
-        leave_input_bams_alone: bool [@default false];
-        use_bwa_mem_opt: bool [@default true];
 } [@@deriving show,make]
 
 let construct_run_name params =

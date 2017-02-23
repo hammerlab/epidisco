@@ -102,63 +102,6 @@ let run_pipeline
 
 
 let pipeline ~biokepi_machine ?work_directory =
-  let parse_input_files files ~kind ~leave_input_bams_alone =
-    let open Biokepi.EDSL.Library.Input in
-    let parse_file file prefix =
-      let file_type =
-        let check = Filename.check_suffix file in
-        if (check ".bam" && leave_input_bams_alone)   then `Bam_no_realign
-        else if check ".bam"                          then `Bam
-        else if (check ".fastq" || check ".fastq.gz") then `Fastq
-        else                                               `Json
-      in
-      (* Beside serialized sample description files, we also would like to
-         capture direct paths to the BAMs/FASTQs to make it easier for the user
-         to submit samples. Each comma-separated BAM or FASTQ (paired or
-         single-ended) will be treated as an individual sample before being
-         merged into the single tumor/normal the rest of the pipeline deals
-         with.
-
-         Examples
-         - JSON file: /path/to/sample.json
-         - BAM file: https://url.to/my.bam
-         - Single-end FASTQ: /path/to/single.fastq.gz,..
-         - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..
-         ...
-      *)
-      match file_type with
-      | `Bam_no_realign -> begin
-          let sample_name =
-            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
-          in
-          bam_sample ~sample_name ~how:`PE ~reference_build:"dontcare" file
-        end
-      | `Bam -> begin
-          let sample_name =
-            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
-          in
-          fastq_sample ~sample_name [fastq_of_bam ~reference_build:"dontcare" `PE file]
-        end
-      | `Fastq ->  begin
-          match (String.split ~on:(`Character '@') file) with
-          | [ pair1; pair2; ] ->
-            let sample_name =
-              let chop f = Filename.(chop_extension f |> basename) in
-              sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
-            in
-            fastq_sample ~sample_name [pe pair1 pair2]
-          | [ single_end; ] ->
-            let sample_name =
-              sprintf "%s-%s" prefix Filename.(chop_extension file |> basename)
-            in
-            fastq_sample ~sample_name [se single_end]
-          | _ -> failwith "Couldn't parse FASTQ path."
-        end
-      | `Json ->
-        Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
-    in
-    List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
-  in
   fun
     (`Dry_run dry_run)
     (`Mouse_run mouse_run)
@@ -189,6 +132,63 @@ let pipeline ~biokepi_machine ?work_directory =
     (`Leave_input_bams_alone leave_input_bams_alone)
     (`Use_bwa_mem_opt use_bwa_mem_opt)
     ->
+      let parse_input_files files ~kind ~leave_input_bams_alone =
+        let open Biokepi.EDSL.Library.Input in
+        let parse_file file prefix =
+          let file_type =
+            let check = Filename.check_suffix file in
+            if (check ".bam" && leave_input_bams_alone)   then `Bam_no_realign
+            else if check ".bam"                          then `Bam
+            else if (check ".fastq" || check ".fastq.gz") then `Fastq
+            else                                               `Json
+          in
+          (* Beside serialized sample description files, we also would like to
+             capture direct paths to the BAMs/FASTQs to make it easier for the user
+             to submit samples. Each comma-separated BAM or FASTQ (paired or
+             single-ended) will be treated as an individual sample before being
+             merged into the single tumor/normal the rest of the pipeline deals
+             with.
+
+             Examples
+             - JSON file: /path/to/sample.json
+             - BAM file: https://url.to/my.bam
+             - Single-end FASTQ: /path/to/single.fastq.gz,..
+             - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..
+             ...
+          *)
+          match file_type with
+          | `Bam_no_realign -> begin
+              let sample_name =
+                prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+              in
+              bam_sample ~sample_name ~how:`PE ~reference_build file
+            end
+          | `Bam -> begin
+              let sample_name =
+                prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+              in
+              fastq_sample ~sample_name [fastq_of_bam ~reference_build `PE file]
+            end
+          | `Fastq ->  begin
+              match (String.split ~on:(`Character '@') file) with
+              | [ pair1; pair2; ] ->
+                let sample_name =
+                  let chop f = Filename.(chop_extension f |> basename) in
+                  sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
+                in
+                fastq_sample ~sample_name [pe pair1 pair2]
+              | [ single_end; ] ->
+                let sample_name =
+                  sprintf "%s-%s" prefix Filename.(chop_extension file |> basename)
+                in
+                fastq_sample ~sample_name [se single_end]
+              | _ -> failwith "Couldn't parse FASTQ path."
+            end
+          | `Json ->
+            Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
+        in
+        List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
+      in
       let normal_inputs =
         parse_input_files
           ~leave_input_bams_alone normal_sample_files ~kind:"normal"

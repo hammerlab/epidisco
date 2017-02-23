@@ -137,7 +137,7 @@ let pipeline ~biokepi_machine ?work_directory =
           let sample_name =
             prefix ^ "-" ^ Filename.(chop_extension file |> basename)
           in
-          fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
+          fastq_sample ~sample_name [fastq_of_bam ~reference_build:"dontcare" `PE file]
         end
       | `Fastq ->  begin
           match (String.split ~on:(`Character '@') file) with

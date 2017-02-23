@@ -19,7 +19,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         let bwa_mem_of_input_sample input_sample =
           match parameters.Parameters.use_bwa_mem_opt with
           | true ->
-            Stdlib.bwa_mem_opt_inputs input_sample
+            Stdlib.bwa_mem_opt_inputs_exn input_sample
             |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
             |> Bfx.list
           | false ->

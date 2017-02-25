@@ -310,6 +310,15 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     in
     let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
       hla_pipeline ~parameters ~normal_samples ~tumor_samples ?rna_fastqs in
+    let topiary =
+      let open Option in
+      mhc_alleles
+      >>= fun alleles ->
+      return (
+        Bfx.topiary somatic_vcfs `NetMHCcons alleles
+        |> Bfx.save "Topiary"
+      )
+    in
     let vaxrank =
       let open Option in
       rna_results
@@ -357,6 +366,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         ~normal_bam_flagstat ~tumor_bam_flagstat
         ?optitype_normal ?optitype_tumor ?optitype_rna
         ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
+        ?topiary
         ~metadata:(Parameters.metadata parameters) in
     let observables =
       report :: begin match emails with

@@ -11,6 +11,9 @@ type t = {
   with_mutect2: bool [@default false];
   with_varscan: bool [@default false];
   with_somaticsniper: bool [@default false];
+  with_bqsr: bool [@default true];
+  with_indel_realigner: bool [@default true];
+  with_mark_dups: bool [@default true];
   with_optitype_normal: bool [@default false];
   with_optitype_tumor: bool [@default false];
   with_optitype_rna: bool [@default false];
@@ -23,7 +26,7 @@ type t = {
   picard_java_max_heap: string option;
   igv_url_server_prefix: string option;
   vaxrank_include_mismatches_after_variant: bool [@default false];
-  leave_input_bams_alone: bool [@default false];
+  realign_bams: bool [@default true];
   use_bwa_mem_opt: bool [@default true];
   experiment_name: string [@main];
 } [@@deriving show,make]

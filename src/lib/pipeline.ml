@@ -39,11 +39,14 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     |> Bfx.merge_bams
 
 
-  let process_dna_bam_pair ~normal ~tumor =
+  let process_dna_bam_pair ~parameters ~normal ~tumor =
+    let paired = Bfx.pair normal tumor in
     let pair =
-      Bfx.pair normal tumor
-      |> Bfx.gatk_indel_realigner_joint
-        ~configuration:indel_realigner_config
+      if parameters.Parameters.with_indel_realigner
+      then paired
+           |> Bfx.gatk_indel_realigner_joint
+             ~configuration:indel_realigner_config
+      else paired
     in
     Bfx.gatk_bqsr (Bfx.pair_first pair), Bfx.gatk_bqsr (Bfx.pair_second pair)
 
@@ -257,6 +260,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in
       process_dna_bam_pair
+        ~parameters
         ~normal:(parameters.normal_inputs |> to_bam)
         ~tumor:(parameters.tumor_inputs |> to_bam)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)

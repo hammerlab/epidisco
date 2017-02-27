@@ -252,12 +252,12 @@ let tool_args transform_term =
   let open Cmdliner.Term in
   let tool_option ?(default=false) f name =
     let doc =
-      if default then sprintf "Also run `%s`" name
-      else sprintf "Run without `%s`" name
+      if default then sprintf "Run without `%s`" name
+      else sprintf "Also run `%s`" name
     in
     let fmt =
-      if default then sprintf "with-%s"
-      else sprintf "without-%s"
+      if default then sprintf "without-%s"
+      else sprintf "with-%s"
     in
     pure (fun v -> if default then f (not v) else f v)
     $ Arg.(

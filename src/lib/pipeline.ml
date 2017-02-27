@@ -11,41 +11,50 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
       let open Biokepi.EDSL.Library.Input in
-      match sample with
-      | Bam {bam_sample_name; path; how; sorting; reference_build} ->
-        Bfx.bam ?sorting ~sample_name:bam_sample_name
-          ~reference_build (Bfx.input_url path)
-      | sample ->
-        let bwa_mem_of_input_sample input_sample =
-          match parameters.Parameters.use_bwa_mem_opt with
-          | true ->
-            Stdlib.bwa_mem_opt_inputs input_sample
-            |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
-            |> Bfx.list
-          | false ->
-            Stdlib.fastq_of_input input_sample
-            |> Bfx.list_map ~f:(Bfx.lambda (Bfx.bwa_mem ~reference_build ?configuration:None))
-        in
-        let aligned_bam =
+      let bam =
+        match sample with
+        | Bam {bam_sample_name; path; how; sorting; reference_build} ->
+          Bfx.bam ?sorting ~sample_name:bam_sample_name
+            ~reference_build (Bfx.input_url path)
+        | sample ->
+          let bwa_mem_of_input_sample input_sample =
+            match parameters.Parameters.use_bwa_mem_opt with
+            | true ->
+              Stdlib.bwa_mem_opt_inputs_exn input_sample
+              |> List.map ~f:(Bfx.bwa_mem_opt ~reference_build ?configuration:None)
+              |> Bfx.list
+            | false ->
+              Stdlib.fastq_of_input input_sample
+              |> Bfx.list_map ~f:(Bfx.lambda (Bfx.bwa_mem ~reference_build ?configuration:None))
+          in
           bwa_mem_of_input_sample sample
           |> Bfx.merge_bams
-          |> Bfx.picard_mark_duplicates
-            ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
-        in
-        aligned_bam
+      in
+      let md_config =
+        mark_dups_config parameters.Parameters.picard_java_max_heap in
+      if parameters.Parameters.with_mark_dups
+      then Bfx.picard_mark_duplicates bam ~configuration:md_config
+      else bam
     in
     List.map samples ~f:sample_to_bam
     |> Bfx.list
     |> Bfx.merge_bams
 
 
-  let process_dna_bam_pair ~normal ~tumor =
+  let process_dna_bam_pair ~parameters ~normal ~tumor =
+    let paired = Bfx.pair normal tumor in
     let pair =
-      Bfx.pair normal tumor
-      |> Bfx.gatk_indel_realigner_joint
-        ~configuration:indel_realigner_config
+      if parameters.Parameters.with_indel_realigner
+      then paired
+           |> Bfx.gatk_indel_realigner_joint
+             ~configuration:indel_realigner_config
+      else paired
     in
-    Bfx.gatk_bqsr (Bfx.pair_first pair), Bfx.gatk_bqsr (Bfx.pair_second pair)
+    let first = Bfx.pair_first pair in
+    let second = Bfx.pair_second pair in
+    if parameters.Parameters.with_bqsr
+    then Bfx.gatk_bqsr first, Bfx.gatk_bqsr second
+    else first, second
 
 
   let vcf_pipeline ~parameters ?bedfile ~normal ~tumor =
@@ -97,30 +106,45 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let to_bam_rna ~parameters ~reference_build samples =
     let sample_to_bam sample =
-      Bfx.list_map sample
-        ~f:(Bfx.lambda (fun fq ->
-            Bfx.star ~configuration:star_config ~reference_build fq))
-      |> Bfx.merge_bams
-      |> Bfx.picard_mark_duplicates
-        ~configuration:(mark_dups_config parameters.Parameters.picard_java_max_heap)
+      let open Biokepi.EDSL.Library.Input in
+      let bam =
+        match sample with
+        | Bam {bam_sample_name; path; how; sorting; reference_build} ->
+          Bfx.bam ?sorting ~sample_name:bam_sample_name
+            ~reference_build (Bfx.input_url path)
+        | sample ->
+          Bfx.list_map (Stdlib.fastq_of_input sample)
+            ~f:(Bfx.lambda (fun fq ->
+                Bfx.star ~configuration:star_config ~reference_build fq))
+          |> Bfx.merge_bams
+      in
+      let configuration =
+        mark_dups_config parameters.Parameters.picard_java_max_heap
+      in
+      if parameters.Parameters.with_mark_dups
+      then Bfx.picard_mark_duplicates ~configuration bam
+      else bam
     in
-    let bam = List.map samples ~f:sample_to_bam
-              |> Bfx.list
-              |> Bfx.merge_bams in
+    let merged_bam =
+      List.map samples ~f:sample_to_bam
+      |> Bfx.list
+      |> Bfx.merge_bams in
     (* We split out the spliced and non-spliced reads so that we can run indel
        realignment on all reads that don't span a splice junction (and thus
        cause the GATK IndelRealigner we're using to crash.) We then merge the
        spliced reads back in. *)
     let spliced_bam =
       let filter = Biokepi.Tools.Sambamba.Filter.Defaults.only_split_reads in
-      Bfx.sambamba_filter ~filter bam in
+      Bfx.sambamba_filter ~filter merged_bam in
     let indel_realigned_bam =
       let filter = Biokepi.Tools.Sambamba.Filter.Defaults.drop_split_reads in
-      Bfx.sambamba_filter ~filter bam
+      Bfx.sambamba_filter ~filter merged_bam
       |> Bfx.gatk_indel_realigner
         ~configuration:indel_realigner_config
     in
-    Bfx.merge_bams @@ Bfx.list [spliced_bam; indel_realigned_bam]
+    if parameters.Parameters.with_indel_realigner
+    then Bfx.merge_bams @@ Bfx.list [spliced_bam; indel_realigned_bam]
+    else merged_bam
 
 
   let seq2hla_hla fqs =
@@ -148,7 +172,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     normal_fastqcs: [ `Fastqc ] Bfx.repr list;
     tumor_fastqcs: [ `Fastqc ] Bfx.repr list;
     rna_fastqcs: [ `Fastqc ] Bfx.repr list option; }
-  let fastqc_pipeline ~normal_samples ~tumor_samples ?rna_samples () =
+  let fastqc_pipeline ~normal_samples ~tumor_samples ?rna_fastqs () =
     let normal_fastqcs =
       List.mapi
         ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:normal-%d" i))
@@ -160,13 +184,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         tumor_samples
     in
     let rna_fastqcs =
-      match rna_samples with
+      match rna_fastqs with
       | None -> None
-      | Some rna_samples ->
+      | Some rna_fastqs ->
         Some
           (List.mapi
              ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:rna-%d" i))
-             rna_samples)
+             rna_fastqs)
     in
     { normal_fastqcs; tumor_fastqcs; rna_fastqcs }
 
@@ -196,7 +220,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     optitype_rna: [ `Optitype_result ] Bfx.repr option;
     seq2hla: [ `Seq2hla_result ] Bfx.repr option;
     mhc_alleles : [ `MHC_alleles ] Bfx.repr option}
-  let hla_pipeline ?rna_samples ~parameters ~normal_samples ~tumor_samples =
+  let hla_pipeline ?rna_fastqs ~parameters ~normal_samples ~tumor_samples =
     let open Parameters in
     let optitype_normal, optitype_tumor =
       let {with_optitype_normal; with_optitype_tumor; _} = parameters in
@@ -210,10 +234,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
        else None)
     in
     let seq2hla, optitype_rna =
-      match rna_samples with
+      match rna_fastqs with
       | None -> None, None
-      | Some rna_samples ->
-        let fqs = concat_samples rna_samples in
+      | Some rna_fastqs ->
+        let fqs = concat_samples rna_fastqs in
         begin match parameters.with_seq2hla, parameters.with_optitype_rna with
         | false, false -> (None, None)
         | false, true -> (None, Some (optitype_hla fqs `RNA "RNA"))
@@ -247,7 +271,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let run parameters =
     let open Parameters in
-    let rna_samples =
+    let rna_fastqs =
       Option.map ~f:(List.map ~f:Stdlib.fastq_of_input) parameters.rna_inputs in
     let normal_samples =
       List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
@@ -257,6 +281,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in
       process_dna_bam_pair
+        ~parameters
         ~normal:(parameters.normal_inputs |> to_bam)
         ~tumor:(parameters.tumor_inputs |> to_bam)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
@@ -269,10 +294,10 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       |> List.map ~f:(fun (_, _, v) -> v) in
     let rna_results =
       let {reference_build; with_seq2hla; with_optitype_rna; _} = parameters in
-      match rna_samples with
+      match parameters.rna_inputs with
       | None -> None
-      | Some rnas ->
-        Some (rna_pipeline rnas ~reference_build ~parameters)
+      | Some samples ->
+        Some (rna_pipeline samples ~reference_build ~parameters)
     in
     let vcfs =
       match parameters.reference_build with
@@ -284,7 +309,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
     let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
-      hla_pipeline ~parameters ~normal_samples ~tumor_samples ?rna_samples in
+      hla_pipeline ~parameters ~normal_samples ~tumor_samples ?rna_fastqs in
     let vaxrank =
       let open Option in
       rna_results
@@ -299,7 +324,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         |> Bfx.save "Vaxrank"
       ) in
     let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
-      fastqc_pipeline ~normal_samples ~tumor_samples ?rna_samples () in
+      fastqc_pipeline ~normal_samples ~tumor_samples ?rna_fastqs () in
     let fastqcs =
       let f name = fun i f ->
         let name = name ^ "-" ^ Int.to_string i in

@@ -102,63 +102,6 @@ let run_pipeline
 
 
 let pipeline ~biokepi_machine ?work_directory =
-  let parse_input_files files ~kind ~leave_input_bams_alone =
-    let open Biokepi.EDSL.Library.Input in
-    let parse_file file prefix =
-      let file_type =
-        let check = Filename.check_suffix file in
-        if (check ".bam" && leave_input_bams_alone)   then `Bam_no_realign
-        else if check ".bam"                          then `Bam
-        else if (check ".fastq" || check ".fastq.gz") then `Fastq
-        else                                               `Json
-      in
-      (* Beside serialized sample description files, we also would like to
-         capture direct paths to the BAMs/FASTQs to make it easier for the user
-         to submit samples. Each comma-separated BAM or FASTQ (paired or
-         single-ended) will be treated as an individual sample before being
-         merged into the single tumor/normal the rest of the pipeline deals
-         with.
-
-         Examples
-         - JSON file: /path/to/sample.json
-         - BAM file: https://url.to/my.bam
-         - Single-end FASTQ: /path/to/single.fastq.gz,..
-         - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..
-         ...
-      *)
-      match file_type with
-      | `Bam_no_realign -> begin
-          let sample_name =
-            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
-          in
-          bam_sample ~sample_name ~how:`PE ~reference_build:"dontcare" file
-        end
-      | `Bam -> begin
-          let sample_name =
-            prefix ^ "-" ^ Filename.(chop_extension file |> basename)
-          in
-          fastq_sample ~sample_name [of_bam ~reference_build:"dontcare" `PE file]
-        end
-      | `Fastq ->  begin
-          match (String.split ~on:(`Character '@') file) with
-          | [ pair1; pair2; ] ->
-            let sample_name =
-              let chop f = Filename.(chop_extension f |> basename) in
-              sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
-            in
-            fastq_sample ~sample_name [pe pair1 pair2]
-          | [ single_end; ] ->
-            let sample_name =
-              sprintf "%s-%s" prefix Filename.(chop_extension file |> basename)
-            in
-            fastq_sample ~sample_name [se single_end]
-          | _ -> failwith "Couldn't parse FASTQ path."
-        end
-      | `Json ->
-        Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
-    in
-    List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
-  in
   fun
     (`Dry_run dry_run)
     (`Mouse_run mouse_run)
@@ -169,6 +112,9 @@ let pipeline ~biokepi_machine ?work_directory =
     (`With_mutect2 with_mutect2)
     (`With_varscan with_varscan)
     (`With_somaticsniper with_somaticsniper)
+    (`With_bqsr with_bqsr)
+    (`With_indel_realigner with_indel_realigner)
+    (`With_mark_dups with_mark_dups)
     (`Vaxrank_include_mismatches_after_variant
        vaxrank_include_mismatches_after_variant)
     (`Bedfile bedfile)
@@ -186,22 +132,79 @@ let pipeline ~biokepi_machine ?work_directory =
     (`From_email from_email)
     (`To_email to_email)
     (`Igv_url_server_prefix igv_url_server_prefix)
-    (`Leave_input_bams_alone leave_input_bams_alone)
+    (`Realign_bams realign_bams)
     (`Use_bwa_mem_opt use_bwa_mem_opt)
     ->
+      let parse_input_files files ~kind ~realign_bams =
+        let open Biokepi.EDSL.Library.Input in
+        let parse_file file prefix =
+          let file_type =
+            let check = Filename.check_suffix file in
+            if (check ".bam" && (not realign_bams))   then `Bam_no_realign
+            else if check ".bam"                          then `Bam
+            else if (check ".fastq" || check ".fastq.gz") then `Fastq
+            else                                               `Json
+          in
+          (* Beside serialized sample description files, we also would like to
+             capture direct paths to the BAMs/FASTQs to make it easier for the user
+             to submit samples. Each comma-separated BAM or FASTQ (paired or
+             single-ended) will be treated as an individual sample before being
+             merged into the single tumor/normal the rest of the pipeline deals
+             with.
+
+             Examples
+             - JSON file: /path/to/sample.json
+             - BAM file: https://url.to/my.bam
+             - Single-end FASTQ: /path/to/single.fastq.gz,..
+             - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..
+             ...
+          *)
+          match file_type with
+          | `Bam_no_realign -> begin
+              let sample_name =
+                prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+              in
+              bam_sample ~sample_name ~how:`PE ~reference_build file
+            end
+          | `Bam -> begin
+              let sample_name =
+                prefix ^ "-" ^ Filename.(chop_extension file |> basename)
+              in
+              fastq_sample ~sample_name [fastq_of_bam ~reference_build `PE file]
+            end
+          | `Fastq ->  begin
+              match (String.split ~on:(`Character '@') file) with
+              | [ pair1; pair2; ] ->
+                let sample_name =
+                  let chop f = Filename.(chop_extension f |> basename) in
+                  sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
+                in
+                fastq_sample ~sample_name [pe pair1 pair2]
+              | [ single_end; ] ->
+                let sample_name =
+                  sprintf "%s-%s" prefix Filename.(chop_extension file |> basename)
+                in
+                fastq_sample ~sample_name [se single_end]
+              | _ -> failwith "Couldn't parse FASTQ path."
+            end
+          | `Json ->
+            Yojson.Safe.from_file file |> of_yojson |> or_fail (prefix ^ "-json")
+        in
+        List.mapi ~f:(fun i f -> parse_file f (kind ^ (Int.to_string i))) files
+      in
       let normal_inputs =
         parse_input_files
-          ~leave_input_bams_alone normal_sample_files ~kind:"normal"
+          ~realign_bams normal_sample_files ~kind:"normal"
       in
       let tumor_inputs =
         parse_input_files
-          ~leave_input_bams_alone tumor_sample_files ~kind:"tumor" in
+          ~realign_bams tumor_sample_files ~kind:"tumor" in
       let rna_inputs =
         match rna_sample_files with
         | [] -> None
         | _ :: _ ->
           Some (parse_input_files
-                  ~leave_input_bams_alone rna_sample_files ~kind:"rna") in
+                  ~realign_bams rna_sample_files ~kind:"rna") in
       let email_options =
         match
           to_email, from_email, mailgun_domain_name, mailgun_api_key with
@@ -232,10 +235,13 @@ let pipeline ~biokepi_machine ?work_directory =
           ~with_mutect2
           ~with_varscan
           ~with_somaticsniper
+          ~with_bqsr
+          ~with_indel_realigner
+          ~with_mark_dups
           ?picard_java_max_heap
           ?igv_url_server_prefix
           ~vaxrank_include_mismatches_after_variant
-          ~leave_input_bams_alone
+          ~realign_bams
       in
       run_pipeline ~biokepi_machine ~results_path ?work_directory
         ~dry_run params ?output_dot_to_png
@@ -244,12 +250,20 @@ let pipeline ~biokepi_machine ?work_directory =
 let tool_args transform_term =
   let open Cmdliner in
   let open Cmdliner.Term in
-  let tool_option f name =
-    pure f
+  let tool_option ?(default=false) f name =
+    let doc =
+      if default then sprintf "Also run `%s`" name
+      else sprintf "Run without `%s`" name
+    in
+    let fmt =
+      if default then sprintf "with-%s"
+      else sprintf "without-%s"
+    in
+    pure (fun v -> if default then f (not v) else f v)
     $ Arg.(
-        value & flag & info [sprintf "with-%s" name]
-          ~doc:(sprintf "Also run `%s`" name)
-          ~docs:"OTHER TOOLS") in
+        value & flag
+        & info [fmt name] ~doc ~docs:"OTHER TOOLS")
+  in
   let tool_cli_bool_option f toolname option =
     pure f
     $ Arg.(
@@ -274,6 +288,9 @@ let tool_args transform_term =
   $ tool_option (fun e -> `With_mutect2 e) "mutect2"
   $ tool_option (fun e -> `With_varscan e) "varscan"
   $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
+  $ tool_option ~default:true (fun e -> `With_bqsr e) "bqsr"
+  $ tool_option ~default:true (fun e -> `With_indel_realigner e) "indeal-realigner"
+  $ tool_option ~default:true (fun e -> `With_mark_dups e) "mark-dups"
   $ tool_cli_bool_option (fun e -> `Vaxrank_include_mismatches_after_variant e)
     "vaxrank"  "ignore-mismatches-after-variant"
   $ bed_file_opt
@@ -413,10 +430,10 @@ let args pipeline =
           ~docv:var_name ~env:(env_var var_name))
   end
   $ begin
-    pure (fun b -> `Leave_input_bams_alone b)
+    pure (fun b -> `Realign_bams (not b))
     $ Arg.(
-        value & opt bool false
-        & info ["leave-input-bams-alone"]
+        value & flag
+        & info ["dont-realign-bams"]
           ~doc:"Don't realign input BAMs.")
   end
   $ begin

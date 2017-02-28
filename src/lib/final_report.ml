@@ -154,14 +154,16 @@ module To_dot = struct
       ~metadata
       meta =
     fun ~var_count ->
-      let opt n v =
-        Option.value_map ~default:[] v ~f:(fun o -> [n, o ~var_count]) in
+      let opt n =
+        Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
+      in
+      let named_map ?(nf=(fun n -> n)) = 
+        List.map ~f:(fun (n, v) -> n, v ~var_count) 
+      in
       function_call "report" (
         ["run-name", string meta;]
-        @ List.map vcfs ~f:(fun (k, v) ->
-            k, v ~var_count)
-        @ List.map fastqcs
-          ~f:(fun (name, f) -> sprintf "%s-fastqc" name, f ~var_count)
+        @ named_map vcfs
+        @ named_map ~nf:(fun n -> sprintf "%s-fastqc" n) fastqcs
         @ [
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;

@@ -91,23 +91,25 @@ module Apply_functions (B : Semantics) = struct
       ~metadata
       meta =
     let open The_pass.Transformation in
+    let map_bwd = List.map ~f:(fun (k, v) -> k, bwd v) in
+    let opt_bwd = Option.map ~f:bwd in
     fwd (B.report meta
-           ~vcfs:(List.map ~f:(fun (k, v) -> k, bwd v) vcfs)
-           ~fastqcs:(List.map ~f:(fun (name, f) -> (name, bwd f)) fastqcs)
+           ~vcfs:(map_bwd vcfs)
+           ~fastqcs:(map_bwd fastqcs)
            ~normal_bam:(bwd normal_bam)
            ~normal_bam_flagstat:(bwd normal_bam_flagstat)
            ~tumor_bam:(bwd tumor_bam)
            ~tumor_bam_flagstat:(bwd tumor_bam_flagstat)
-           ?optitype_normal:(Option.map optitype_normal bwd)
-           ?optitype_tumor:(Option.map optitype_tumor bwd)
-           ?optitype_rna:(Option.map optitype_rna bwd)
-           ?rna_bam:(Option.map rna_bam bwd)
-           ?vaxrank:(Option.map vaxrank bwd)
-           ?rna_bam_flagstat:(Option.map rna_bam_flagstat bwd)
-           ?topiary:(Option.map topiary bwd)
-           ?isovar:(Option.map isovar bwd)
-           ?seq2hla:(Option.map seq2hla bwd)
-           ?stringtie:(Option.map stringtie bwd)
+           ?optitype_normal:(opt_bwd optitype_normal)
+           ?optitype_tumor:(opt_bwd optitype_tumor)
+           ?optitype_rna:(opt_bwd optitype_rna)
+           ?rna_bam:(opt_bwd rna_bam)
+           ?vaxrank:(opt_bwd vaxrank)
+           ?rna_bam_flagstat:(opt_bwd rna_bam_flagstat)
+           ?topiary:(opt_bwd topiary)
+           ?isovar:(opt_bwd isovar)
+           ?seq2hla:(opt_bwd seq2hla)
+           ?stringtie:(opt_bwd stringtie)
            ?bedfile
            ?igv_url_server_prefix
            ~metadata)

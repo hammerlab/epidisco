@@ -282,7 +282,7 @@ EOF
 setup-epidisco () {
     install-epidisco
     create-pipeline-script
-    wget https://raw.githubusercontent.com/hammerlab/coclobas/master/tools/docker/biokepi_machine.ml
+    wget -O /coclo/biokepi_machine.ml https://raw.githubusercontent.com/hammerlab/coclobas/master/tools/docker/biokepi_machine.ml
     source configuration.env
     # EXTERNAL_IP and TOKEN both come from configuration.env
     ketrew init --conf ./_kclient_config/ --just-client https://$EXTERNAL_IP/gui?token=$TOKEN

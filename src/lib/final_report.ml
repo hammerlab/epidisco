@@ -22,6 +22,30 @@ let canonicalize path =
      then  parts
      else "" :: parts)
 
+
+(** Here a few useful utility functions to make constructing the
+   report data structures easier **)
+
+module Report_utils (V: sig val vc: int end) = struct
+  let var_count = V.vc
+
+  (* Helps when the tool is optional and passes a single result
+     down to the report *)
+  let opt n = 
+    Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
+
+  (* Helps when tools procude named result tuples where the names 
+     are passed down to report as well. Allows modifying the name
+     when needed via the `nf` parameter *)
+  let named_map ?(nf=(fun n -> n)) = 
+    List.map ~f:(fun (n, v) -> nf n, v ~var_count) 
+
+  (* Helps when the tool is optional but produced multiple named
+     results to be included in the report *)
+  let opt_named_map = 
+    Option.value_map ~default:[] ~f:named_map
+end
+
 module type Semantics = sig
 
   type 'a repr
@@ -78,15 +102,8 @@ module To_json = struct
       run_name =
    fun ~var_count ->
       let args =
-        let opt n =
-          Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
-        in
-        let named_map ?(nf=(fun n -> n)) = 
-          List.map ~f:(fun (n, v) -> nf n, v ~var_count) 
-        in
-        let opt_named_map = 
-          Option.value_map ~default:[] ~f:named_map
-        in
+        let module Rutils = Report_utils(struct let vc = var_count end) in
+        let open Rutils in
         [
           "run-name", `String run_name;
           "metadata", `Assoc (List.map metadata ~f:(fun (k, v) -> k, `String v));
@@ -164,15 +181,8 @@ module To_dot = struct
       ~metadata
       meta =
     fun ~var_count ->
-      let opt n =
-        Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
-      in
-      let named_map ?(nf=(fun n -> n)) = 
-        List.map ~f:(fun (n, v) -> nf n, v ~var_count) 
-      in
-      let opt_named_map = 
-        Option.value_map ~default:[] ~f:named_map
-      in
+      let module Rutils = Report_utils(struct let vc = var_count end) in
+      let open Rutils in
       function_call "report" (
         ["run-name", string meta;]
         @ named_map vcfs

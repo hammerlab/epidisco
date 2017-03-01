@@ -82,7 +82,7 @@ module To_json = struct
           Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
         in
         let named_map ?(nf=(fun n -> n)) = 
-          List.map ~f:(fun (n, v) -> n, v ~var_count) 
+          List.map ~f:(fun (n, v) -> nf n, v ~var_count) 
         in
         let opt_named_map = 
           Option.value_map ~default:[] ~f:named_map
@@ -168,7 +168,7 @@ module To_dot = struct
         Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
       in
       let named_map ?(nf=(fun n -> n)) = 
-        List.map ~f:(fun (n, v) -> n, v ~var_count) 
+        List.map ~f:(fun (n, v) -> nf n, v ~var_count) 
       in
       let opt_named_map = 
         Option.value_map ~default:[] ~f:named_map

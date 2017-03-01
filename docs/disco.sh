@@ -50,8 +50,11 @@ create () {
 }
 
 get-external-ip () {
-    local boxname=$(hostname)
-    local desc="gcloud compute instances describe $boxname"
+    local boxname=$1
+    if [[ -z "$boxname" ]]; then
+        boxname=$(hostname)
+    fi
+    local desc="gcloud compute instances describe $boxname --zone $GCLOUD_ZONE"
     local ip=$($desc | grep natIP | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
     echo $ip
 }
@@ -152,6 +155,20 @@ setup-docker () {
 # - `--privileged` is for NFS mounting
 # - `-p 443:443` is to pass the port 443 to the container
 enter-docker () {
+    # Make sure IP hasn't changed since last time we enter this docker,
+    # which can happen when gbox is cloned or restarted.
+    local cip=$(cat /coclo/configuration.env |grep "^export EXTERNAL_IP" |cut -d"=" -f2)
+    local boxname=$(hostname)
+    local eip=$(get-external-ip $boxname)
+
+    if [[ "$cip" != "$eip" ]]; then
+        echo "ERROR: Looks like your host has a different IP address" \
+            "than your configured one in '/coclo/configuration.env'" \
+            "(Current IP: $eip | Configured IP: $cip)." \
+            "Please update your configuration and repeat this step."
+        exit 1
+    fi
+
     echo "Mounting local /coclo to Docker's /coclo"
     echo "cd to /coclo to get access to your config and disco.sh"
     echo "...entering the Docker!"

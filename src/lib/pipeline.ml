@@ -173,6 +173,20 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       stringtie = bam |> Bfx.stringtie |> Bfx.save "stringtie";
       rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";}
 
+  let rna_kallisto ~reference_build ?rna_fastqs () =
+    match rna_fastqs with
+    | None -> None
+    | Some rfqs ->
+      Some
+        (List.mapi
+          ~f:(fun i fq ->
+            let name = sprintf "Kallisto:rna-%d" i in
+            name,
+            Bfx.concat fq
+            |> Bfx.kallisto ~reference_build
+            |> Bfx.save name)
+          rfqs)
+
   type fastqc_results = {
     normal_fastqcs: [ `Fastqc ] Bfx.repr list;
     tumor_fastqcs: [ `Fastqc ] Bfx.repr list;
@@ -336,7 +350,16 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         Bfx.vaxrank ~configuration somatic_vcfs rna_bam
           `NetMHCcons alleles
         |> Bfx.save "Vaxrank"
-      ) in
+      )
+    in
+    let kallisto =
+      let {reference_build; with_kallisto; _} = parameters in
+      if with_kallisto
+      then
+        rna_kallisto ~reference_build ?rna_fastqs ()
+      else
+        None
+    in
     let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
       fastqc_pipeline ~normal_samples ~tumor_samples ?rna_fastqs () in
     let fastqcs =
@@ -371,7 +394,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         ~normal_bam_flagstat ~tumor_bam_flagstat
         ?optitype_normal ?optitype_tumor ?optitype_rna
         ?vaxrank ?seq2hla ?stringtie ?rna_bam_flagstat
-        ?topiary
+        ?topiary ?kallisto
         ~metadata:(Parameters.metadata parameters) in
     let observables =
       report :: begin match emails with

@@ -88,11 +88,13 @@ module Apply_functions (B : Semantics) = struct
       ?seq2hla
       ?stringtie
       ?bedfile
+      ?kallisto
       ~metadata
       meta =
     let open The_pass.Transformation in
     let map_bwd = List.map ~f:(fun (k, v) -> k, bwd v) in
     let opt_bwd = Option.map ~f:bwd in
+    let mopt_bwd = Option.map ~f:map_bwd in
     fwd (B.report meta
            ~vcfs:(map_bwd vcfs)
            ~fastqcs:(map_bwd fastqcs)
@@ -110,6 +112,7 @@ module Apply_functions (B : Semantics) = struct
            ?isovar:(opt_bwd isovar)
            ?seq2hla:(opt_bwd seq2hla)
            ?stringtie:(opt_bwd stringtie)
+           ?kallisto:(mopt_bwd kallisto)
            ?bedfile
            ?igv_url_server_prefix
            ~metadata)

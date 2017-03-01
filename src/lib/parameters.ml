@@ -17,6 +17,7 @@ type t = {
   with_optitype_normal: bool [@default false];
   with_optitype_tumor: bool [@default false];
   with_optitype_rna: bool [@default false];
+  with_kallisto: bool [@default false];
   email_options: Qc.EDSL.email_options option;
   bedfile: string option [@default None];
   reference_build: string;

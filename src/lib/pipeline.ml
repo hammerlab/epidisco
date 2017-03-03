@@ -7,15 +7,16 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
-
   let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
       let open Biokepi.EDSL.Library.Input in
       let bam =
         match sample with
         | Bam {bam_sample_name; path; how; sorting; reference_build} ->
-          Bfx.bam ?sorting ~sample_name:bam_sample_name
-            ~reference_build (Bfx.input_url path)
+          (Bfx.bam ?sorting ~sample_name:bam_sample_name
+             ~reference_build (Bfx.input_url path))
+          |> Bfx.picard_reorder_sam
+            ?mem_param:parameters.Parameters.picard_java_max_heap
         | sample ->
           let bwa_mem_of_input_sample input_sample =
             match parameters.Parameters.use_bwa_mem_opt with
@@ -25,7 +26,9 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
               |> Bfx.list
             | false ->
               Stdlib.fastq_of_input input_sample
-              |> Bfx.list_map ~f:(Bfx.lambda (Bfx.bwa_mem ~reference_build ?configuration:None))
+              |> Bfx.list_map
+                ~f:(Bfx.lambda
+                      (Bfx.bwa_mem ~reference_build ?configuration:None))
           in
           bwa_mem_of_input_sample sample
           |> Bfx.merge_bams
@@ -112,6 +115,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         | Bam {bam_sample_name; path; how; sorting; reference_build} ->
           Bfx.bam ?sorting ~sample_name:bam_sample_name
             ~reference_build (Bfx.input_url path)
+          |> Bfx.picard_reorder_sam
+            ?mem_param:parameters.Parameters.picard_java_max_heap
         | sample ->
           Bfx.list_map (Stdlib.fastq_of_input sample)
             ~f:(Bfx.lambda (fun fq ->

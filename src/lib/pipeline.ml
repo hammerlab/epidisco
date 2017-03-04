@@ -99,13 +99,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let qc fqs = Bfx.concat fqs |> Bfx.fastqc
 
-
   (* Makes a list of samples (which are themselves fastqs or BAMs) into one (or
      two, if paired-end) FASTQs. *)
   let concat_samples samples =
+    let samplefqs = List.map ~f:(fun (n, f) -> f) samples in
     Bfx.list_map
       ~f:(Bfx.lambda (fun f -> Bfx.concat f))
-      (Bfx.list samples)
+      (Bfx.list samplefqs)
 
   let to_bam_rna ~parameters ~reference_build samples =
     let sample_to_bam sample =
@@ -178,39 +178,31 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     | None -> None
     | Some rfqs ->
       Some
-        (List.mapi
-          ~f:(fun i fq ->
-            let name = sprintf "Kallisto:rna-%d" i in
+        (List.map
+          ~f:(fun (n, fq) ->
+            let name = sprintf "Kallisto: rna-%s" n in
             name,
-            Bfx.concat fq
+            fq
+            |> Bfx.concat
             |> Bfx.kallisto ~reference_build
             |> Bfx.save name)
           rfqs)
 
   type fastqc_results = {
-    normal_fastqcs: [ `Fastqc ] Bfx.repr list;
-    tumor_fastqcs: [ `Fastqc ] Bfx.repr list;
-    rna_fastqcs: [ `Fastqc ] Bfx.repr list option; }
+    normal_fastqcs: (string * [ `Fastqc ] Bfx.repr) list;
+    tumor_fastqcs: (string * [ `Fastqc ] Bfx.repr) list;
+    rna_fastqcs: (string * [ `Fastqc ] Bfx.repr) list option; }
   let fastqc_pipeline ~normal_samples ~tumor_samples ?rna_fastqs () =
-    let normal_fastqcs =
-      List.mapi
-        ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:normal-%d" i))
-        normal_samples
+    let run_named_fastqc stype samples =
+      List.map 
+        ~f:(fun (sname, fq) -> 
+          let qcname = sprintf "QC: %s-%s" stype sname in
+          qcname, qc fq |> Bfx.save qcname)
+        samples
     in
-    let tumor_fastqcs =
-      List.mapi
-        ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:tumor-%d" i))
-        tumor_samples
-    in
-    let rna_fastqcs =
-      match rna_fastqs with
-      | None -> None
-      | Some rna_fastqs ->
-        Some
-          (List.mapi
-             ~f:(fun i fq -> qc fq |> Bfx.save (sprintf "QC:rna-%d" i))
-             rna_fastqs)
-    in
+    let normal_fastqcs = run_named_fastqc "normal" normal_samples in
+    let tumor_fastqcs = run_named_fastqc "tumor" tumor_samples in
+    let rna_fastqcs = Option.map ~f:(run_named_fastqc "rna") rna_fastqs in
     { normal_fastqcs; tumor_fastqcs; rna_fastqcs }
 
 
@@ -290,12 +282,20 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let run parameters =
     let open Parameters in
-    let rna_fastqs =
-      Option.map ~f:(List.map ~f:Stdlib.fastq_of_input) parameters.rna_inputs in
-    let normal_samples =
-      List.map ~f:Stdlib.fastq_of_input parameters.normal_inputs in
-    let tumor_samples =
-      List.map ~f:Stdlib.fastq_of_input parameters.tumor_inputs in
+    let get_named_fastqs =
+      let open Biokepi.EDSL.Library.Input in
+      List.map
+        ~f:(fun i ->
+          let sname =
+            match i with
+            | Fastq {fastq_sample_name; _} -> fastq_sample_name
+            | Bam {bam_sample_name; _} -> bam_sample_name
+          in
+          sname, Stdlib.fastq_of_input i)
+    in
+    let rna_fastqs = Option.map ~f:get_named_fastqs parameters.rna_inputs in
+    let normal_fastqs = get_named_fastqs parameters.normal_inputs in
+    let tumor_fastqs = get_named_fastqs parameters.tumor_inputs in
     let normal_bam, tumor_bam =
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in
@@ -328,7 +328,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
     let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
-      hla_pipeline ~parameters ~normal_samples ~tumor_samples ?rna_fastqs in
+      hla_pipeline ~parameters 
+        ~normal_samples:normal_fastqs 
+        ~tumor_samples:tumor_fastqs
+        ?rna_fastqs
+    in
     let topiary =
       let open Option in
       mhc_alleles
@@ -361,16 +365,16 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         None
     in
     let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
-      fastqc_pipeline ~normal_samples ~tumor_samples ?rna_fastqs () in
+      fastqc_pipeline 
+        ~normal_samples:normal_fastqs 
+        ~tumor_samples:tumor_fastqs
+        ?rna_fastqs
+        () 
+    in
     let fastqcs =
-      let f name = fun i f ->
-        let name = name ^ "-" ^ Int.to_string i in
-        name, f
-      in
-      List.mapi ~f:(f "normal") fastqc_results.normal_fastqcs
-      @ List.mapi ~f:(f "tumor") fastqc_results.tumor_fastqcs
-      @ List.mapi ~f:(f "RNA")
-        (Option.value ~default:[] fastqc_results.rna_fastqcs) in
+      fastqc_results.normal_fastqcs
+      @ fastqc_results.tumor_fastqcs
+      @ Option.value ~default:[] fastqc_results.rna_fastqcs in
     let normal_bam_flagstat, tumor_bam_flagstat =
       Bfx.flagstat normal_bam |> Bfx.save "normal-bam-flagstat",
       Bfx.flagstat tumor_bam |> Bfx.save "tumor-bam-flagstat"

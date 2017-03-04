@@ -192,7 +192,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     normal_fastqcs: (string * [ `Fastqc ] Bfx.repr) list;
     tumor_fastqcs: (string * [ `Fastqc ] Bfx.repr) list;
     rna_fastqcs: (string * [ `Fastqc ] Bfx.repr) list option; }
-  let fastqc_pipeline ~normal_samples ~tumor_samples ?rna_fastqs () =
+  let fastqc_pipeline ~normal_fastqs ~tumor_fastqs ?rna_fastqs () =
     let run_named_fastqc stype samples =
       List.map 
         ~f:(fun (sname, fq) -> 
@@ -200,8 +200,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           qcname, qc fq |> Bfx.save qcname)
         samples
     in
-    let normal_fastqcs = run_named_fastqc "normal" normal_samples in
-    let tumor_fastqcs = run_named_fastqc "tumor" tumor_samples in
+    let normal_fastqcs = run_named_fastqc "normal" normal_fastqs in
+    let tumor_fastqcs = run_named_fastqc "tumor" tumor_fastqs in
     let rna_fastqcs = Option.map ~f:(run_named_fastqc "rna") rna_fastqs in
     { normal_fastqcs; tumor_fastqcs; rna_fastqcs }
 
@@ -231,17 +231,17 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     optitype_rna: [ `Optitype_result ] Bfx.repr option;
     seq2hla: [ `Seq2hla_result ] Bfx.repr option;
     mhc_alleles : [ `MHC_alleles ] Bfx.repr option}
-  let hla_pipeline ?rna_fastqs ~parameters ~normal_samples ~tumor_samples =
+  let hla_pipeline ?rna_fastqs ~parameters ~normal_fastqs ~tumor_fastqs =
     let open Parameters in
     let optitype_normal, optitype_tumor =
       let {with_optitype_normal; with_optitype_tumor; _} = parameters in
       (if with_optitype_normal
        then
-         Some (optitype_hla (concat_samples normal_samples) `DNA "Normal")
+         Some (optitype_hla (concat_samples normal_fastqs) `DNA "Normal")
        else None),
       (if with_optitype_tumor
        then
-         Some (optitype_hla (concat_samples tumor_samples) `DNA "Tumor")
+         Some (optitype_hla (concat_samples tumor_fastqs) `DNA "Tumor")
        else None)
     in
     let seq2hla, optitype_rna =
@@ -328,10 +328,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           name, (Bfx.save (sprintf "vcf-%s" name) v))
     in
     let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
-      hla_pipeline ~parameters 
-        ~normal_samples:normal_fastqs 
-        ~tumor_samples:tumor_fastqs
-        ?rna_fastqs
+      hla_pipeline ~parameters ~normal_fastqs ~tumor_fastqs ?rna_fastqs
     in
     let topiary =
       let open Option in
@@ -365,11 +362,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         None
     in
     let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
-      fastqc_pipeline 
-        ~normal_samples:normal_fastqs 
-        ~tumor_samples:tumor_fastqs
-        ?rna_fastqs
-        () 
+      fastqc_pipeline ~normal_fastqs ~tumor_fastqs ?rna_fastqs () 
     in
     let fastqcs =
       fastqc_results.normal_fastqcs

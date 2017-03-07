@@ -315,7 +315,7 @@ submit-test () {
     fi
     DREAM=https://storage.googleapis.com/dream-challenge
     KETREW_CONFIGURATION=_kclient_config/configuration.ml \
-        ocaml run_pipeline.ml pipeline \
+        ocaml run_pipeline.ml \
           --normal $DREAM/synthetic.challenge.set2.normal.bam \
           --tumor  $DREAM/synthetic.challenge.set2.tumor.bam \
           --reference-build b37 \

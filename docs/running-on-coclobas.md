@@ -149,7 +149,7 @@ done with `./disco.sh submit-test`).
 source configuration.env
 KETREW_CONFIGURATION=_kclient_config/configuration.ml; \
     DREAM=https://storage.googleapis.com/dream-challenge; \
-    ocaml run_pipeline.ml pipeline \
+    ocaml run_pipeline.ml \
        --normal $DREAM/synthetic.challenge.set2.normal.bam \
        --tumor $DREAM/synthetic.challenge.set2.tumor.bam \
        --reference-build b37 \
@@ -158,7 +158,7 @@ KETREW_CONFIGURATION=_kclient_config/configuration.ml; \
 ```
 
 If you'd like to submit with your own data, you can inspect the options of
- Epidisco with `ocaml run_pipeline.ml pipeline --help`.
+ Epidisco with `ocaml run_pipeline.ml --help`.
 
 You can watch the run execute through the Ketrew Web UI found at `./disco.sh
 ketrew-ui`; the result of the run can be found in `$BIOKEPI_WORK_DIR/results`.
@@ -192,7 +192,7 @@ BIOKEPI_WORK_DIR=/nfs-pool2/biokepi/ \
 INSTALL_TOOLS_PATH=$ORIGINAL_WORK_DIR/toolkit \
 PYENSEMBL_CACHE_DIR=$ORIGINAL_WORK_DIR/pyensembl-cache \
 REFERENCE_GENOMES_PATH=$ORIGINAL_WORK_DIR/reference-genome \
-    ocaml run_pipeline.ml pipeline \
+    ocaml run_pipeline.ml \
       --results-path $ORIGINAL_WORK_DIR/results/ \
       --normal ...
 ```

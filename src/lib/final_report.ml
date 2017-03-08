@@ -34,7 +34,7 @@ module Report_utils (V: sig val vc: int end) = struct
   let opt n = 
     Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
 
-  (* Helps when tools procude named result tuples where the names 
+  (* Helps when tools provide named result tuples where the names 
      are passed down to report as well. Allows modifying the name
      when needed via the `nf` parameter *)
   let named_map ?(nf=(fun n -> n)) = 

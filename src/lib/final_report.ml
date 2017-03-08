@@ -453,7 +453,7 @@ module To_workflow
             let wf = get_vcf repr in
             let title = sprintf "VCF: %s" name in
             title, Some wf#product#path)
-        @ (Option.value_map ~default:(["Kallisto", None]) kallisto ~f:(fun ks ->
+        @ (Option.value_map ~default:[] kallisto ~f:(fun ks ->
             (List.map ks ~f:(fun (name, k) ->
               let wf = get_kallisto_result k in
               let title = sprintf "Kallisto: %s" name in

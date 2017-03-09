@@ -151,42 +151,50 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     then Bfx.merge_bams @@ Bfx.list [spliced_bam; indel_realigned_bam]
     else merged_bam
 
+  let get_named_fastqs =
+    let open Biokepi.EDSL.Library.Input in
+    List.map
+      ~f:(fun i ->
+        let sname =
+          match i with
+          | Fastq {fastq_sample_name; _} -> fastq_sample_name
+          | Bam {bam_sample_name; _} -> bam_sample_name
+        in
+        sname, Stdlib.fastq_of_input i)
 
   let seq2hla_hla fqs =
     Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save "Seq2HLA"
 
-
   let optitype_hla fqs ftype name =
     Bfx.optitype ftype (Bfx.concat fqs) |> Bfx.save ("OptiType-" ^ name)
 
+  let run_kallisto ~reference_build ~rna_samples () =
+    List.map
+      ~f:(fun (n, fq) ->
+        let name = sprintf "Kallisto: rna-%s" n in
+        name, fq
+        |> Bfx.concat
+        |> Bfx.kallisto ~reference_build
+        |> Bfx.save name)
+      (get_named_fastqs rna_samples)
 
   type rna_results =
     { rna_bam: [ `Bam ] Bfx.repr;
       stringtie: [ `Gtf ] Bfx.repr;
-      rna_bam_flagstat: [ `Flagstat ] Bfx.repr }
+      rna_bam_flagstat: [ `Flagstat ] Bfx.repr;
+      kallisto: (string * [ `Kallisto_result ] Bfx.repr) list option; }
 
-  let rna_pipeline
-      ~parameters ~reference_build samples =
-    let bam = to_bam_rna ~parameters ~reference_build samples in
-    (* Seq2HLA does not work on mice: *)
+  let rna_pipeline ~parameters ~reference_build rna_samples =
+    let bam = to_bam_rna ~parameters ~reference_build rna_samples in
+    let kallisto =
+      if parameters.Parameters.with_kallisto
+      then Some (run_kallisto ~reference_build ~rna_samples ())
+      else None
+    in
     { rna_bam = bam |> Bfx.save "rna-bam";
       stringtie = bam |> Bfx.stringtie |> Bfx.save "stringtie";
-      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";}
-
-  let rna_kallisto ~reference_build ?rna_fastqs () =
-    match rna_fastqs with
-    | None -> None
-    | Some rfqs ->
-      Some
-        (List.map
-          ~f:(fun (n, fq) ->
-            let name = sprintf "Kallisto: rna-%s" n in
-            name,
-            fq
-            |> Bfx.concat
-            |> Bfx.kallisto ~reference_build
-            |> Bfx.save name)
-          rfqs)
+      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";
+      kallisto; }
 
   type fastqc_results = {
     normal_fastqcs: (string * [ `Fastqc ] Bfx.repr) list;
@@ -282,17 +290,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let run parameters =
     let open Parameters in
-    let get_named_fastqs =
-      let open Biokepi.EDSL.Library.Input in
-      List.map
-        ~f:(fun i ->
-          let sname =
-            match i with
-            | Fastq {fastq_sample_name; _} -> fastq_sample_name
-            | Bam {bam_sample_name; _} -> bam_sample_name
-          in
-          sname, Stdlib.fastq_of_input i)
-    in
     let rna_fastqs = Option.map ~f:get_named_fastqs parameters.rna_inputs in
     let normal_fastqs = get_named_fastqs parameters.normal_inputs in
     let tumor_fastqs = get_named_fastqs parameters.tumor_inputs in
@@ -315,8 +312,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       let {reference_build; with_seq2hla; with_optitype_rna; _} = parameters in
       match parameters.rna_inputs with
       | None -> None
-      | Some samples ->
-        Some (rna_pipeline samples ~reference_build ~parameters)
+      | Some rna_samples ->
+        Some (rna_pipeline rna_samples ~reference_build ~parameters)
     in
     let vcfs =
       match parameters.reference_build with
@@ -353,14 +350,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         |> Bfx.save "Vaxrank"
       )
     in
-    let kallisto =
-      let {reference_build; with_kallisto; _} = parameters in
-      if with_kallisto
-      then
-        rna_kallisto ~reference_build ?rna_fastqs ()
-      else
-        None
-    in
     let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
       fastqc_pipeline ~normal_fastqs ~tumor_fastqs ?rna_fastqs () 
     in
@@ -373,15 +362,15 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       Bfx.flagstat tumor_bam |> Bfx.save "tumor-bam-flagstat"
     in
     let emails =
-      email_pipeline
-        ?rna_results ~parameters ~normal_bam_flagstat ~tumor_bam_flagstat ~fastqcs in
+      email_pipeline ?rna_results 
+        ~parameters ~normal_bam_flagstat ~tumor_bam_flagstat ~fastqcs
+    in
     let report =
-      let rna_bam, optitype_rna, stringtie, seq2hla, rna_bam_flagstat =
+      let rna_bam, stringtie, rna_bam_flagstat, kallisto =
         match rna_results with
-        | None -> None, None, None, None, None
-        | Some {rna_bam; stringtie; rna_bam_flagstat} ->
-          Some rna_bam, optitype_rna, Some stringtie,
-          seq2hla, Some rna_bam_flagstat
+        | None -> None, None, None, None
+        | Some {rna_bam; stringtie; rna_bam_flagstat; kallisto} ->
+          Some rna_bam, Some stringtie, Some rna_bam_flagstat, kallisto
       in
       Bfx.report
         (Parameters.construct_run_name parameters)

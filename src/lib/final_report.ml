@@ -36,9 +36,9 @@ module Report_utils (V: sig val vc: int end) = struct
 
   (* Helps when tools provide named result tuples where the names 
      are passed down to report as well. Allows modifying the name
-     when needed via the `nf` parameter *)
-  let named_map ?(nf=(fun n -> n)) = 
-    List.map ~f:(fun (n, v) -> nf n, v ~var_count) 
+     when needed via the `namefun` parameter *)
+  let named_map ?(namefun=(fun n -> n)) = 
+    List.map ~f:(fun (n, v) -> namefun n, v ~var_count) 
 
   (* Helps when the tool is optional but produced multiple named
      results to be included in the report *)
@@ -109,7 +109,7 @@ module To_json = struct
           "metadata", `Assoc (List.map metadata ~f:(fun (k, v) -> k, `String v));
         ]
         @ named_map vcfs
-        @ named_map ~nf:(fun n -> sprintf "%s-fastqc" n) fastqcs
+        @ named_map ~namefun:(fun n -> sprintf "%s-fastqc" n) fastqcs
         @ [
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
@@ -186,7 +186,7 @@ module To_dot = struct
       function_call "report" (
         ["run-name", string meta;]
         @ named_map vcfs
-        @ named_map ~nf:(fun n -> sprintf "%s-fastqc" n) fastqcs
+        @ named_map ~namefun:(fun n -> sprintf "%s-fastqc" n) fastqcs
         @ [
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;

@@ -221,7 +221,7 @@ module To_workflow
       ]
     | Kallisto_result wf ->
       Mem.add_to_save key [
-        saved ~is_directory:true wf#product#path wf;
+        saved wf#product#path wf;
       ]
     | other ->
       ksprintf failwith

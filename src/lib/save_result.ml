@@ -219,6 +219,10 @@ module To_workflow
       Mem.add_to_save key [
         saved ~is_directory:true wf#product#work_dir_path wf;
       ]
+    | Kallisto_result wf ->
+      Mem.add_to_save key [
+        saved wf#product#path wf;
+      ]
     | other ->
       ksprintf failwith
         "To_workflow.register non-{Bam or Vcf}: not implemented: %s"

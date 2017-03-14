@@ -22,6 +22,30 @@ let canonicalize path =
      then  parts
      else "" :: parts)
 
+
+(** Here a few useful utility functions to make constructing the
+   report data structures easier **)
+
+module Report_utils (V: sig val vc: int end) = struct
+  let var_count = V.vc
+
+  (* Helps when the tool is optional and passes a single result
+     down to the report *)
+  let opt n = 
+    Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
+
+  (* Helps when tools provide named result tuples where the names 
+     are passed down to report as well. Allows modifying the name
+     when needed via the `namefun` parameter *)
+  let named_map ?(namefun=(fun n -> n)) = 
+    List.map ~f:(fun (n, v) -> namefun n, v ~var_count) 
+
+  (* Helps when the tool is optional but produced multiple named
+     results to be included in the report *)
+  let opt_named_map = 
+    Option.value_map ~default:[] ~f:named_map
+end
+
 module type Semantics = sig
 
   type 'a repr
@@ -44,6 +68,7 @@ module type Semantics = sig
     ?seq2hla: [ `Seq2hla_result ] repr ->
     ?stringtie: [ `Gtf ] repr ->
     ?bedfile: string ->
+    ?kallisto:(string * [ `Kallisto_result ] repr) list ->
     metadata: (string * string) list ->
     string ->
     unit repr
@@ -72,19 +97,19 @@ module To_json = struct
       ?seq2hla
       ?stringtie
       ?bedfile
+      ?kallisto
       ~metadata
       run_name =
-    fun ~var_count ->
+   fun ~var_count ->
       let args =
-        let opt n o =
-          Option.value_map ~default:[] o ~f:(fun v -> [n, v ~var_count]) in
+        let module Rutils = Report_utils(struct let vc = var_count end) in
+        let open Rutils in
         [
           "run-name", `String run_name;
           "metadata", `Assoc (List.map metadata ~f:(fun (k, v) -> k, `String v));
         ]
-        @ List.map vcfs ~f:(fun (k, v) -> k, v ~var_count)
-        @ List.map fastqcs
-          ~f:(fun (name, f) -> sprintf "%s-fastqc" name, f ~var_count)
+        @ named_map vcfs
+        @ named_map ~namefun:(fun n -> sprintf "%s-fastqc" n) fastqcs
         @ [
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
@@ -101,6 +126,7 @@ module To_json = struct
         @ opt "isovar" isovar
         @ opt "seq2hla" seq2hla
         @ opt "stringtie" stringtie
+        @ opt_named_map kallisto
         @ Option.value_map
           ~default:[]
           bedfile ~f:(fun f -> ["bedfile", `String f])
@@ -151,17 +177,16 @@ module To_dot = struct
       ?seq2hla
       ?stringtie
       ?bedfile
+      ?kallisto
       ~metadata
       meta =
     fun ~var_count ->
-      let opt n v =
-        Option.value_map ~default:[] v ~f:(fun o -> [n, o ~var_count]) in
+      let module Rutils = Report_utils(struct let vc = var_count end) in
+      let open Rutils in
       function_call "report" (
         ["run-name", string meta;]
-        @ List.map vcfs ~f:(fun (k, v) ->
-            k, v ~var_count)
-        @ List.map fastqcs
-          ~f:(fun (name, f) -> sprintf "%s-fastqc" name, f ~var_count)
+        @ named_map vcfs
+        @ named_map ~namefun:(fun n -> sprintf "%s-fastqc" n) fastqcs
         @ [
           "normal-bam", normal_bam ~var_count;
           "tumor-bam", tumor_bam ~var_count;
@@ -178,6 +203,7 @@ module To_dot = struct
         @ opt "isovar" isovar
         @ opt "seq2hla" seq2hla
         @ opt "stringtie" stringtie
+        @ opt_named_map kallisto
         @ Option.value_map
           ~default:[]
           bedfile ~f:(fun f -> ["bedfile", `String f])
@@ -275,6 +301,7 @@ module To_workflow
       ?seq2hla
       ?stringtie
       ?bedfile
+      ?kallisto
       ~metadata
       run_name =
     let open Ketrew.EDSL in
@@ -329,10 +356,18 @@ module To_workflow
       | true -> [depends_on igv_dot_xml]
       | false ->
         let opt o f =
-          Option.value_map o ~default:[] ~f:(fun v -> [ f v |> depends_on ]) in
+          Option.value_map o ~default:[] ~f:(fun v -> [ f v |> depends_on ])
+        in
+        let named_map get_func = 
+          List.map ~f:(fun (_, v) -> get_func v |> depends_on)
+        in
+        let mopt o f =
+          let fnamed_map = named_map f in
+          Option.value_map o ~default:[] ~f:fnamed_map
+        in
         depends_on igv_dot_xml
-        :: List.map vcfs ~f:(fun (_, v) -> get_vcf v |> depends_on)
-        @ List.map fastqcs ~f:(fun (_, f) -> get_fastqc_result f |> depends_on)
+        :: named_map get_vcf vcfs
+        @ named_map get_fastqc_result fastqcs
         @ [
           get_bam normal_bam |> depends_on;
           get_bam tumor_bam |> depends_on;
@@ -349,6 +384,7 @@ module To_workflow
         @ opt isovar get_isovar_result
         @ opt seq2hla get_seq2hla_result
         @ opt stringtie get_gtf
+        @ mopt kallisto get_kallisto_result
         @ List.concat_map (Mem.all_to_save ()) ~f:(fun (key, savs) ->
             List.map savs ~f:(fun s ->
                 let open Config in
@@ -417,6 +453,11 @@ module To_workflow
             let wf = get_vcf repr in
             let title = sprintf "VCF: %s" name in
             title, Some wf#product#path)
+        @ (Option.value_map ~default:[] kallisto ~f:(fun ks ->
+            (List.map ks ~f:(fun (name, k) ->
+              let wf = get_kallisto_result k in
+              let title = sprintf "Kallisto: %s" name in
+              title, Some wf#product#path))))
         @ [
           "OptiType-Normal",
           Option.map optitype_normal ~f:(fun i ->

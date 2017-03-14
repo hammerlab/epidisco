@@ -112,6 +112,7 @@ let pipeline ~biokepi_machine ?work_directory =
     (`With_mutect2 with_mutect2)
     (`With_varscan with_varscan)
     (`With_somaticsniper with_somaticsniper)
+    (`With_kallisto with_kallisto)
     (`With_bqsr with_bqsr)
     (`With_indel_realigner with_indel_realigner)
     (`With_mark_dups with_mark_dups)
@@ -238,6 +239,7 @@ let pipeline ~biokepi_machine ?work_directory =
           ~with_bqsr
           ~with_indel_realigner
           ~with_mark_dups
+          ~with_kallisto
           ?picard_java_max_heap
           ?igv_url_server_prefix
           ~vaxrank_include_mismatches_after_variant
@@ -288,6 +290,7 @@ let tool_args transform_term =
   $ tool_option (fun e -> `With_mutect2 e) "mutect2"
   $ tool_option (fun e -> `With_varscan e) "varscan"
   $ tool_option (fun e -> `With_somaticsniper e) "somaticsniper"
+  $ tool_option (fun e -> `With_kallisto e) "kallisto"
   $ tool_option ~default:true (fun e -> `With_bqsr e) "bqsr"
   $ tool_option ~default:true (fun e -> `With_indel_realigner e) "indeal-realigner"
   $ tool_option ~default:true (fun e -> `With_mark_dups e) "mark-dups"

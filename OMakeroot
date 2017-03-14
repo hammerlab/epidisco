@@ -19,7 +19,7 @@ else
     GIT_COMMIT = None
     export
 
-LIB_PACKAGES = biokepi ppx_deriving.std
+LIB_PACKAGES = biokepi ppx_deriving.std ppx_deriving_cmdliner
 
 OCAMLFLAGS = -bin-annot -absname -thread -short-paths -g \
              -keep-docs -keep-locs \

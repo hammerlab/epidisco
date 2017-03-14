@@ -135,7 +135,69 @@ module EDSL = struct
       to_email: string;
       mailgun_api_key: string;
       mailgun_domain_name: string; }
-    [@@deriving show,make]
+  [@@deriving show,make]
+
+  let email_options_cmdliner_term =
+    let open Cmdliner.Term in
+    pure
+      (fun
+        (`Mailgun_api_key mailgun_api_key)
+        (`Mailgun_domain_name mailgun_domain_name)
+        (`Mailgun_from_email from_email)
+        (`Mailgun_to_email to_email)
+        ->
+          match to_email, from_email, mailgun_domain_name, mailgun_api_key with
+          | Some to_email, Some from_email,
+            Some mailgun_domain_name, Some mailgun_api_key ->
+            Some (make_email_options ~to_email ~from_email
+                    ~mailgun_domain_name ~mailgun_api_key)
+          | None, None, None, None -> None
+          | _, _, _, _ ->
+            failwith "ERROR: If one of `to-email`, `from-email`, \
+                      `mailgun-api-key`, `mailgun-domain-name` \
+                      are specified, then they all must be."
+      )
+    $ begin
+      let var_name = "MAILGUN_API_KEY" in
+      pure (fun s -> `Mailgun_api_key s)
+      $ Cmdliner.Arg.(
+          value & opt (some string) None
+          & info ["mailgun-api-key"]
+            ~doc:"Mailgun API key, used for notification emails."
+            ~docv:var_name ~env:(env_var var_name)
+            ~docs:"MAILGUN NOTIFICATIONS")
+    end
+    $ begin
+      let var_name = "MAILGUN_DOMAIN" in
+      pure (fun s -> `Mailgun_domain_name s)
+      $ Cmdliner.Arg.(
+          value & opt (some string) None
+          & info ["mailgun-domain"]
+            ~doc:"Mailgun domain, used for notification emails."
+            ~docv:var_name ~env:(env_var var_name)
+            ~docs:"MAILGUN NOTIFICATIONS")
+    end
+    $ begin
+      let var_name = "FROM_EMAIL" in
+      pure (fun s -> `Mailgun_from_email s)
+      $ Cmdliner.Arg.(
+          value & opt (some string) None
+          & info ["from-email"]
+            ~doc:"Email address used for notification emails."
+            ~docv:var_name ~env:(env_var var_name)
+            ~docs:"MAILGUN NOTIFICATIONS")
+    end
+    $ begin
+      let var_name = "TO_EMAIL" in
+      pure (fun s -> `Mailgun_to_email s)
+      $ Cmdliner.Arg.(
+          value & opt (some string) None
+          & info ["to-email"]
+            ~doc:"Email address to send notification emails to."
+            ~docv:var_name ~env:(env_var var_name)
+            ~docs:"MAILGUN NOTIFICATIONS")
+    end
+
 
   module type Semantics = sig
     type 'a repr

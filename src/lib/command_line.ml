@@ -9,7 +9,7 @@ module Options = struct
     (** Dry-run; does not submit the pipeline to a Ketrew server. *)
     output_dot_to_png: string option; [@docv "PATH"] [@docs "CLIENT"]
     (** Output the pipeline as a PNG file. *)
-  } [@@deriving cmdliner]
+  } [@@deriving cmdliner,make]
 
   let cmdf fmt =
   ksprintf (fun s ->
@@ -124,7 +124,7 @@ let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
       `S "OPTIONS";
       `S "OTHER TOOLS";
       `S "MAILGUN NOTIFICATIONS";
-      `S "ENVIRONMENT VARIABLES";
+      `S "ENVIRONMENT";
       `S "AUTHORS";
       `P "Sebastien Mondet <seb@mondet.org>"; `Noblank;
       `P "Isaac Hodes <isaachodes@gmail.com>"; `Noblank;
@@ -141,8 +141,7 @@ let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
 let main ~biokepi_machine ?work_directory () =
   let version = Metadata.version |> Lazy.force in
   let pipe = pipeline_term ~biokepi_machine ?work_directory ~version Sys.argv.(0) in
-  let open Cmdliner in
-  match Term.eval pipe with
+  match Cmdliner.Term.eval pipe with
   | `Ok f -> f
   | `Error _ -> exit 1
   | `Version | `Help -> exit 0

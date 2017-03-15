@@ -130,6 +130,23 @@ EOF"
 
 module EDSL = struct
 
+  module Cli = struct
+    type t = {
+      from_email: string option; [@env "FROM_EMAIL"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Email address used for notification emails. *)
+      to_email: string option; [@env "TO_EMAIL"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Email address to send notification emails to. *)
+      mailgun_api_key: string option; [@env "MAILGUN_API_KEY"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Mailgun API key, used for notification emails. *)
+      mailgun_domain_name: string option; [@env "MAILGUN_DOMAIN"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Mailgun domain, used for notification emails. *)
+    } [@@deriving cmdliner]
+  end
+
   type email_options = {
     from_email: string;
     to_email: string;
@@ -138,16 +155,11 @@ module EDSL = struct
   } [@@deriving show,make]
 
 
-  let email_options_cmdliner_term =
-    let open Cmdliner.Term in
-    pure
-      (fun
-        (`Mailgun_api_key mailgun_api_key)
-        (`Mailgun_domain_name mailgun_domain_name)
-        (`Mailgun_from_email from_email)
-        (`Mailgun_to_email to_email)
-        ->
-          match to_email, from_email, mailgun_domain_name, mailgun_api_key with
+  let cmdliner_term =
+    Cmdliner.Term.(
+      const
+        (fun {Cli. from_email; to_email; mailgun_api_key; mailgun_domain_name;}
+          -> match to_email, from_email, mailgun_domain_name, mailgun_api_key with
           | Some to_email, Some from_email,
             Some mailgun_domain_name, Some mailgun_api_key ->
             Some (make_email_options ~to_email ~from_email
@@ -156,48 +168,8 @@ module EDSL = struct
           | _, _, _, _ ->
             failwith "ERROR: If one of `to-email`, `from-email`, \
                       `mailgun-api-key`, `mailgun-domain-name` \
-                      are specified, then they all must be."
-      )
-    $ begin
-      let var_name = "MAILGUN_API_KEY" in
-      pure (fun s -> `Mailgun_api_key s)
-      $ Cmdliner.Arg.(
-          value & opt (some string) None
-          & info ["mailgun-api-key"]
-            ~doc:"Mailgun API key, used for notification emails."
-            ~docv:var_name ~env:(env_var var_name)
-            ~docs:"MAILGUN NOTIFICATIONS")
-    end
-    $ begin
-      let var_name = "MAILGUN_DOMAIN" in
-      pure (fun s -> `Mailgun_domain_name s)
-      $ Cmdliner.Arg.(
-          value & opt (some string) None
-          & info ["mailgun-domain"]
-            ~doc:"Mailgun domain, used for notification emails."
-            ~docv:var_name ~env:(env_var var_name)
-            ~docs:"MAILGUN NOTIFICATIONS")
-    end
-    $ begin
-      let var_name = "FROM_EMAIL" in
-      pure (fun s -> `Mailgun_from_email s)
-      $ Cmdliner.Arg.(
-          value & opt (some string) None
-          & info ["from-email"]
-            ~doc:"Email address used for notification emails."
-            ~docv:var_name ~env:(env_var var_name)
-            ~docs:"MAILGUN NOTIFICATIONS")
-    end
-    $ begin
-      let var_name = "TO_EMAIL" in
-      pure (fun s -> `Mailgun_to_email s)
-      $ Cmdliner.Arg.(
-          value & opt (some string) None
-          & info ["to-email"]
-            ~doc:"Email address to send notification emails to."
-            ~docv:var_name ~env:(env_var var_name)
-            ~docs:"MAILGUN NOTIFICATIONS")
-    end
+                      are specified, then they all must be.")
+      $ Cli.cmdliner_term ())
 
 
   module type Semantics = sig

@@ -24,10 +24,12 @@ type t = {
   (** Max Java heap size used for Picard tools e.g. 8g, 256m. *)
   igv_url_server_prefix: string option [@env "IGV_URL_SERVER_PREFIX"];
   (** URL with which to prefix igvxml paths. *)
-  realign_bams: bool [@default true];
-  (** Realign input BAMs. *)
-  use_bwa_mem_opt: bool [@default true];
-  (** Use the optimized workflow-node for bwa-mem \
+  realign_bams: bool [@default true]
+      [@name "without-realigning-bams"];
+  (** Don't realign input BAMs. *)
+  use_bwa_mem_opt: bool [@default true]
+      [@name "without-bwa-mem-optimized"];
+  (** Don't use the optimized workflow-node for bwa-mem \
       (i.e. bam2fq + align + sort + to-bam). *)
   experiment_name: string [@main] [@aka ["E"]];
   (** Give a name to the run(s). *)
@@ -67,12 +69,14 @@ type t = {
   (** Also run with `optitype-tumor`. *)
   with_optitype_rna: bool [@docs "OTHER TOOLS"];
   (** Also run with `optitype-rna`. *)
-  (* TODO: what should these be called? the name is misleading *)
-  with_bqsr: bool [@default true] [@docs "OTHER TOOLS"];
+  with_bqsr: bool [@default true] [@docs "OTHER TOOLS"]
+      [@name "without-bqsr"];
   (** Run without `BQSR`. *)
-  with_indel_realigner: bool [@default true] [@docs "OTHER TOOLS"];
+  with_indel_realigner: bool [@default true] [@docs "OTHER TOOLS"]
+      [@name "without-indel-realigner"];
   (** Run without `indel-realigner`. *)
-  with_mark_dups: bool [@default true] [@docs "OTHER TOOLS"];
+  with_mark_dups: bool [@default true] [@docs "OTHER TOOLS"]
+      [@name "without-mark-dups"];
   (** Run without `mark-dups`. *)
 } [@@deriving cmdliner,show,make]
 

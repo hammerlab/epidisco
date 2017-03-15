@@ -3,27 +3,36 @@ module String = Sosa.Native_string
 let (//) = Filename.concat
 
 
-let cmdf fmt =
+module Options = struct
+  type t = {
+    dry_run: bool; [@docs "CLIENT"]
+    (** Dry-run; does not submit the pipeline to a Ketrew server. *)
+    output_dot_to_png: string option; [@docv "PATH"] [@docs "CLIENT"]
+    (** Output the pipeline as a PNG file. *)
+  } [@@deriving cmdliner]
+
+  let cmdf fmt =
   ksprintf (fun s ->
       match Sys.command s with
       | 0 -> ()
       | n -> ksprintf failwith "CMD failed: %s → %d" s n) fmt
 
-
-let output_dot sm ~dot ~png =
-  try
-    let out = open_out dot in
-    SmartPrint.to_out_channel  80 2 out sm;
-    close_out out;
-    let dotlog = png ^ ".log" in
-    cmdf "dot -v -x -Tpng  %s -o %s > %s 2>&1" dot png dotlog;
-  with e ->
-    eprintf "ERROR outputing DOT: %s\n%!" (Printexc.to_string e)
+  let output_dot sm ~dot ~png =
+    try
+      let out = open_out dot in
+      SmartPrint.to_out_channel  80 2 out sm;
+      close_out out;
+      let dotlog = png ^ ".log" in
+      cmdf "dot -v -x -Tpng  %s -o %s > %s 2>&1" dot png dotlog;
+    with e ->
+      eprintf "ERROR outputing DOT: %s\n%!" (Printexc.to_string e)
+end
 
 
 let run_pipeline
     ~biokepi_machine
     ?work_directory
+    client_options
     params =
   let run_name = Parameters.construct_run_name params in
   let module Mem = Save_result.Mem () in
@@ -48,11 +57,11 @@ let run_pipeline
       end;
     } in
     let dot = P2dot.run params dot_parameters in
-    begin match params.Parameters.output_dot_to_png with
+    begin match client_options.Options.output_dot_to_png with
     | None -> ()
     | Some png ->
       printf "Outputing DOT to PNG: %s\n%!" png;
-      output_dot dot ~dot:(Filename.chop_extension png ^ ".dot") ~png
+      Options.output_dot dot ~dot:(Filename.chop_extension png ^ ".dot") ~png
     end;
     SmartPrint.to_string 2 72 dot
   in
@@ -82,7 +91,7 @@ let run_pipeline
       ~name:(sprintf "Epidisco: %s %s"
                params.Parameters.experiment_name run_name)
   in
-  begin match params.Parameters.dry_run with
+  begin match client_options.Options.dry_run with
   | true ->
     printf "Dry-run, not submitting %s (%s)\n%!"
       (Ketrew.EDSL.node_name workflow_1)
@@ -94,10 +103,6 @@ let run_pipeline
       ~add_tags:[params.Parameters.experiment_name; run_name;
                  "From-" ^ Ketrew.EDSL.node_id workflow_1]
   end
-
-
-let pipeline ~biokepi_machine ?work_directory params =
-  run_pipeline ~biokepi_machine ?work_directory params
 
 
 let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
@@ -127,13 +132,13 @@ let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
       `P "Browse and report new issues at"; `Noblank;
       `P "<https://github.com/hammerlab/epidisco>."; ] in
   let info = Term.(info cmd ~man ~doc:"The Epidisco Pipeline") in
-  let term = Term.(pure (pipeline ~biokepi_machine ?work_directory)
+  let term = Term.(pure (run_pipeline ~biokepi_machine ?work_directory)
+                   $ Options.cmdliner_term ()
                    $ Parameters.cmdliner_term ()) in
   (term, info)
 
 
-let main
-    ~biokepi_machine ?work_directory () =
+let main ~biokepi_machine ?work_directory () =
   let version = Metadata.version |> Lazy.force in
   let pipe = pipeline_term ~biokepi_machine ?work_directory ~version Sys.argv.(0) in
   let open Cmdliner in

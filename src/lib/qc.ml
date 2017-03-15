@@ -130,12 +130,13 @@ EOF"
 
 module EDSL = struct
 
-  type email_options =
-    { from_email: string;
-      to_email: string;
-      mailgun_api_key: string;
-      mailgun_domain_name: string; }
-  [@@deriving show,make]
+  type email_options = {
+    from_email: string;
+    to_email: string;
+    mailgun_api_key: string;
+    mailgun_domain_name: string;
+  } [@@deriving show,make]
+
 
   let email_options_cmdliner_term =
     let open Cmdliner.Term in

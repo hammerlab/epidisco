@@ -12,10 +12,6 @@ type t = {
   (** RNA sample(s) for the pipeline. *)
 
   (* OPTIONS *)
-  dry_run: bool;
-  (** Dry-run; does not submit the pipeline to a Ketrew server. *)
-  output_dot_to_png: string option; [@docv "PATH"]
-  (** Output the pipeline as a PNG file. *)
   reference_build: string;
   (** The reference build *)
   results_path: string;

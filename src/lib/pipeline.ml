@@ -63,12 +63,12 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
   let vcf_pipeline ~parameters ?bedfile ~normal ~tumor =
     let open Parameters in
     let {with_mutect2; with_varscan; with_somaticsniper;
-         mouse_run; reference_build; _} = parameters in
+         without_cosmic; reference_build; _} = parameters in
     let opt_vcf test name somatic vcf =
       if test then [name, somatic, vcf ()] else []
     in
     let mutect_config =
-      if mouse_run then mutect_config_mouse else mutect_config in
+      if without_cosmic then mutect_config_mouse else mutect_config in
     let vcfs =
       [
         "strelka", true, Bfx.strelka () ~normal ~tumor ~configuration:strelka_config;
@@ -79,7 +79,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       @ opt_vcf with_mutect2
         "mutect2" true (fun () ->
             let configuration =
-              if mouse_run then
+              if without_cosmic then
                 Biokepi.Tools.Gatk.Configuration.Mutect2.default_without_cosmic
               else
                 Biokepi.Tools.Gatk.Configuration.Mutect2.default
@@ -290,16 +290,19 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let run parameters =
     let open Parameters in
-    let rna_fastqs = Option.map ~f:get_named_fastqs parameters.rna_inputs in
-    let normal_fastqs = get_named_fastqs parameters.normal_inputs in
-    let tumor_fastqs = get_named_fastqs parameters.tumor_inputs in
+    let normal_inputs = Parameters.normal_inputs parameters in
+    let tumor_inputs = Parameters.tumor_inputs parameters in
+    let rna_inputs = Parameters.rna_inputs parameters in
+    let rna_fastqs = Option.map ~f:get_named_fastqs rna_inputs in
+    let normal_fastqs = get_named_fastqs normal_inputs in
+    let tumor_fastqs = get_named_fastqs tumor_inputs in
     let normal_bam, tumor_bam =
       let to_bam =
         to_bam_dna ~reference_build:parameters.reference_build ~parameters in
       process_dna_bam_pair
         ~parameters
-        ~normal:(parameters.normal_inputs |> to_bam)
-        ~tumor:(parameters.tumor_inputs |> to_bam)
+        ~normal:(normal_inputs |> to_bam)
+        ~tumor:(tumor_inputs |> to_bam)
       |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
     in
     let bedfile = parameters.bedfile in
@@ -310,7 +313,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       |> List.map ~f:(fun (_, _, v) -> v) in
     let rna_results =
       let {reference_build; with_seq2hla; with_optitype_rna; _} = parameters in
-      match parameters.rna_inputs with
+      match rna_inputs with
       | None -> None
       | Some rna_samples ->
         Some (rna_pipeline rna_samples ~reference_build ~parameters)

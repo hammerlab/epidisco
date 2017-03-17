@@ -130,12 +130,47 @@ EOF"
 
 module EDSL = struct
 
-  type email_options =
-    { from_email: string;
-      to_email: string;
-      mailgun_api_key: string;
-      mailgun_domain_name: string; }
-    [@@deriving show,make]
+  module Cli = struct
+    type t = {
+      from_email: string option; [@env "FROM_EMAIL"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Email address used for notification emails. *)
+      to_email: string option; [@env "TO_EMAIL"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Email address to send notification emails to. *)
+      mailgun_api_key: string option; [@env "MAILGUN_API_KEY"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Mailgun API key, used for notification emails. *)
+      mailgun_domain_name: string option; [@env "MAILGUN_DOMAIN"]
+        [@docs "MAILGUN NOTIFICATIONS"]
+      (** Mailgun domain, used for notification emails. *)
+    } [@@deriving cmdliner]
+  end
+
+  type email_options = {
+    from_email: string;
+    to_email: string;
+    mailgun_api_key: string;
+    mailgun_domain_name: string;
+  } [@@deriving show,make]
+
+
+  let cmdliner_term =
+    Cmdliner.Term.(
+      const
+        (fun {Cli. from_email; to_email; mailgun_api_key; mailgun_domain_name;}
+          -> match to_email, from_email, mailgun_domain_name, mailgun_api_key with
+          | Some to_email, Some from_email,
+            Some mailgun_domain_name, Some mailgun_api_key ->
+            Some (make_email_options ~to_email ~from_email
+                    ~mailgun_domain_name ~mailgun_api_key)
+          | None, None, None, None -> None
+          | _, _, _, _ ->
+            failwith "ERROR: If one of `to-email`, `from-email`, \
+                      `mailgun-api-key`, `mailgun-domain-name` \
+                      are specified, then they all must be.")
+      $ Cli.cmdliner_term ())
+
 
   module type Semantics = sig
     type 'a repr

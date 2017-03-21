@@ -1,4 +1,4 @@
-# Running Epidisco With Ketrew/Coclobas Locally
+# Submitting from Another Host
 
 First, follow the instructions [here](running-on-coclobas.md).
 

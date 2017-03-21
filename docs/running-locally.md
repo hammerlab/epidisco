@@ -10,7 +10,6 @@ Setup is easy:
 
 * Copy the following files/folders to somewhere on your preferred host:
    * `/coclo/_kclient_config`
-   * `/coclo/_fake_tls`
    * `/coclo/biokepi_machine.ml`
    * `/coclo/configuration.env`
 

@@ -348,13 +348,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       hla_pipeline ~parameters ~normal_fastqs ~tumor_fastqs ?rna_fastqs
     in
     let topiary =
-      let open Option in
-      mhc_alleles
-      >>= fun alleles ->
-      return (
-        Bfx.topiary somatic_vcfs `NetMHCcons alleles
-        |> Bfx.save "Topiary"
-      )
+      match parameters.Parameters.with_topiary, mhc_alleles with
+      | false, _ | _, None -> None
+      | true, Some alleles ->
+        Some (Bfx.topiary somatic_vcfs `NetMHCcons alleles
+              |> Bfx.save "Topiary")
     in
     let vaxrank =
       let open Option in

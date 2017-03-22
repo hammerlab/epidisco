@@ -1,3 +1,5 @@
+open Nonstd
+
 
 let indel_realigner_config =
   let open Biokepi.Tools.Gatk.Configuration in
@@ -24,11 +26,18 @@ let indel_realigner_config =
   in
   (indel_cfg, target_cfg)
 
-let star_config =
+let star_config params =
+  let parameters =
+    match params.Parameters.machine_memory with
+    | None -> []
+    | Some gb ->
+      let mem_bytes = gb * 1000 * 1000 * 1000 in
+      ["--limitBAMsortRAM", sprintf "%d" mem_bytes]
+  in
   let open Biokepi.Tools.Star.Configuration.Align in
   {
     name = "mapq_default_60";
-    parameters = [];
+    parameters;
     (* Cf. https://www.broadinstitute.org/gatk/guide/article?id=3891
 
        In particular:

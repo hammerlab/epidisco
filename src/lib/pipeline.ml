@@ -7,6 +7,12 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   module Stdlib = Biokepi.EDSL.Library.Make(Bfx)
 
+  let java_mem_param parameters =
+    let open Option in
+    parameters.Parameters.machine_memory
+    >>= fun mem ->
+    return (sprintf "%dg" mem)
+
   let to_bam_dna ~parameters ~reference_build samples =
     let sample_to_bam sample =
       let open Biokepi.EDSL.Library.Input in
@@ -16,7 +22,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           (Bfx.bam ?sorting ~sample_name:bam_sample_name
              ~reference_build (Bfx.input_url path))
           |> Bfx.picard_reorder_sam
-            ?mem_param:parameters.Parameters.picard_java_max_heap
+            ?mem_param:(java_mem_param parameters)
         | sample ->
           let bwa_mem_of_input_sample input_sample =
             match parameters.Parameters.use_bwa_mem_opt with
@@ -34,7 +40,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           |> Bfx.merge_bams
       in
       let md_config =
-        mark_dups_config parameters.Parameters.picard_java_max_heap in
+        mark_dups_config (java_mem_param parameters)
+      in
       if parameters.Parameters.with_mark_dups
       then Bfx.picard_mark_duplicates bam ~configuration:md_config
       else bam
@@ -118,15 +125,16 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           Bfx.bam ?sorting ~sample_name:bam_sample_name
             ~reference_build (Bfx.input_url path)
           |> Bfx.picard_reorder_sam
-            ?mem_param:parameters.Parameters.picard_java_max_heap
+            ?mem_param:(java_mem_param parameters)
         | sample ->
           Bfx.list_map (Stdlib.fastq_of_input sample)
             ~f:(Bfx.lambda (fun fq ->
-                Bfx.star ~configuration:star_config ~reference_build fq))
+                Bfx.star ~configuration:(star_config parameters)
+                  ~reference_build fq))
           |> Bfx.merge_bams
       in
       let configuration =
-        mark_dups_config parameters.Parameters.picard_java_max_heap
+        mark_dups_config (java_mem_param parameters)
       in
       if parameters.Parameters.with_mark_dups
       then Bfx.picard_mark_duplicates ~configuration bam

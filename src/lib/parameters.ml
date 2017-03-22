@@ -16,8 +16,9 @@ type t = {
   (** The reference build *)
   results_path: string;
   (** Where to save the results. *)
-  picard_java_max_heap: string option;
-  (** Max Java heap size used for Picard tools e.g. 8g, 256m. *)
+  machine_memory: int option;
+  (** Max machine memory, to be used for Picard tools + STAR if defaults aren't
+      working. In GB. *)
   igv_url_server_prefix: string option [@env "IGV_URL_SERVER_PREFIX"];
   (** URL with which to prefix igvxml paths. *)
   realign_bams: bool [@default true]

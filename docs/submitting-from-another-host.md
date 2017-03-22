@@ -14,8 +14,9 @@ Setup is easy:
    * `/coclo/configuration.env`
 
 * Now, on your preferred host:
-   * `opam install tls`
-   * `opam install` all requirements, including e.g. `epidisco` and `biokepi`
+   * `opam pin add -n biokepi https://github.com/hammerlab/biokepi.git`
+   * `opam pin add -n epidisco https://github.com/hammerlab/epidisco.git`
+   * `opam install -y tls biokepi epidisco coclobas`
    * Edit `configuration.env` to point `KETREW_CONFIGURATION` to the location of `_kclient_config` on this host.
    * `source configuration.env`
    * Run your pipeline: `ocaml <pipeline.ml>`

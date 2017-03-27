@@ -8,6 +8,11 @@ travis_install_on_linux () {
     echo "yes" | sudo add-apt-repository ppa:$ppa
     sudo apt-get update -qq
 
+    # Need Postgres for Ketrew
+    
+    sudo killall postgres
+    sudo apt-get install libpq-dev postgresql-9.4
+
     export opam_init_options="--comp=$OCAML_VERSION"
     sudo apt-get install -qq  opam time git
 }
@@ -46,20 +51,15 @@ opam update
 # Cf. https://github.com/mirleft/ocaml-nocrypto/issues/104
 opam pin add oasis 0.4.6
 
-opam pin add omake 0.9.8.6-0.rc1
-opam pin add ketrew https://github.com/hammerlab/ketrew.git#575d592f09d099725133e221a921324de998743f
-opam pin add biokepi https://github.com/hammerlab/biokepi.git
-opam pin add ppx_deriving_cmdliner https://github.com/hammerlab/ppx_deriving_cmdliner.git
+opam pin add -n ketrew https://github.com/hammerlab/ketrew.git
+opam pin add -n biokepi https://github.com/hammerlab/biokepi.git
 
-
-echo 'ocamlfind list | grep lwt'
-ocamlfind list | grep lwt
-echo 'ocamlfind list | grep cohttp'
-ocamlfind list | grep cohttp
+opam pin add epidisco --yes .
+opam install --yes epidisco
 
 echo "Setting Warn-Error for the Travis test"
 export OCAMLPARAM="warn-error=A,_"
 
-opam pin add epidisco --yes .
-opam install --yes epidisco
+omake clean
+omake build-all
 

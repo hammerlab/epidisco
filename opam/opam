@@ -17,4 +17,5 @@ depends: [
   "biokepi"
   "omake"
   "ocamlfind"
+  "ppx_deriving_cmdliner"
 ]

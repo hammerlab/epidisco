@@ -1,5 +1,5 @@
 
-let indel_realigner_config =
+let indel_realigner_config heap =
   let open Biokepi.Tools.Gatk.Configuration in
   (* We need to ignore reads with no quality scores that BWA includes in the
      BAM, but the GATK's Indel Realigner chokes on (even though the reads are
@@ -12,6 +12,7 @@ let indel_realigner_config =
     filter_reads_with_n_cigar = true;
     filter_mismatching_base_and_quals = true;
     filter_bases_not_stored = true;
+    java_heap_memory = heap;
     parameters = [] }
   in
   let target_cfg = {
@@ -20,12 +21,14 @@ let indel_realigner_config =
     filter_reads_with_n_cigar = true;
     filter_mismatching_base_and_quals = true;
     filter_bases_not_stored = true;
+    java_heap_memory = heap;
     parameters = [] }
   in
   (indel_cfg, target_cfg)
 
 let star_config =
-  let open Biokepi.Tools.Star.Configuration.Align in
+  let open Biokepi.
+             Tools.Star.Configuration.Align in
   {
     name = "mapq_default_60";
     parameters = [];

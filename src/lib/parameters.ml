@@ -16,8 +16,8 @@ type t = {
   (** The reference build *)
   results_path: string;
   (** Where to save the results. *)
-  picard_java_max_heap: string option;
-  (** Max Java heap size used for Picard tools e.g. 8g, 256m. *)
+  java_max_heap: string option;
+  (** Max Java heap size used for Picard & GATK tools e.g. 8g, 256m. *)
   igv_url_server_prefix: string option [@env "IGV_URL_SERVER_PREFIX"];
   (** URL with which to prefix igvxml paths. *)
   realign_bams: bool [@default true]
@@ -40,6 +40,12 @@ type t = {
   bedfile: string option; [@aka ["filter-vcfs-to-region-with"]]
   (** Run bedtools intersect on VCFs with the given bed file. file://... or
       http(s)://... *)
+  binding_predictor: Biokepi.Tools.Topiary.predictor_type;
+    [@opaque]
+    [@default `NetMHCcons]
+    [@enum
+      ["netmhcpan", `NetMHCpan ; "netmhccons", `NetMHCcons; "random", `Random;]]
+  (** Which binding predictor to use for Vaxrank and Topiary. *)
 
   (* NOTIFICATIONS: *)
   email_options: Qc.EDSL.email_options option [@term Qc.EDSL.cmdliner_term];

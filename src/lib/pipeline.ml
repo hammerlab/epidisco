@@ -16,7 +16,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           (Bfx.bam ?sorting ~sample_name:bam_sample_name
              ~reference_build (Bfx.input_url path))
           |> Bfx.picard_reorder_sam
-            ?mem_param:parameters.Parameters.picard_java_max_heap
+            ?mem_param:parameters.Parameters.java_max_heap
         | sample ->
           let bwa_mem_of_input_sample input_sample =
             match parameters.Parameters.use_bwa_mem_opt with
@@ -34,7 +34,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           |> Bfx.merge_bams
       in
       let md_config =
-        mark_dups_config parameters.Parameters.picard_java_max_heap in
+        mark_dups_config parameters.Parameters.java_max_heap in
       if parameters.Parameters.with_mark_dups
       then Bfx.picard_mark_duplicates bam ~configuration:md_config
       else bam
@@ -50,7 +50,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       if parameters.Parameters.with_indel_realigner
       then paired
            |> Bfx.gatk_indel_realigner_joint
-             ~configuration:indel_realigner_config
+             ~configuration:(indel_realigner_config parameters.Parameters.java_max_heap)
       else paired
     in
     let first = Bfx.pair_first pair in
@@ -118,7 +118,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           Bfx.bam ?sorting ~sample_name:bam_sample_name
             ~reference_build (Bfx.input_url path)
           |> Bfx.picard_reorder_sam
-            ?mem_param:parameters.Parameters.picard_java_max_heap
+            ?mem_param:parameters.Parameters.java_max_heap
         | sample ->
           Bfx.list_map (Stdlib.fastq_of_input sample)
             ~f:(Bfx.lambda (fun fq ->
@@ -126,7 +126,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
           |> Bfx.merge_bams
       in
       let configuration =
-        mark_dups_config parameters.Parameters.picard_java_max_heap
+        mark_dups_config parameters.Parameters.java_max_heap
       in
       if parameters.Parameters.with_mark_dups
       then Bfx.picard_mark_duplicates ~configuration bam
@@ -147,7 +147,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       let filter = Biokepi.Tools.Sambamba.Filter.Defaults.drop_split_reads in
       Bfx.sambamba_filter ~filter merged_bam
       |> Bfx.gatk_indel_realigner
-        ~configuration:indel_realigner_config
+        ~configuration:(indel_realigner_config parameters.Parameters.java_max_heap)
     in
     if parameters.Parameters.with_indel_realigner
     then Bfx.merge_bams @@ Bfx.list [spliced_bam; indel_realigned_bam]
@@ -344,7 +344,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       mhc_alleles
       >>= fun alleles ->
       return (
-        Bfx.topiary somatic_vcfs `NetMHCcons alleles
+        Bfx.topiary somatic_vcfs parameters.Parameters.binding_predictor alleles
         |> Bfx.save "Topiary"
       )
     in
@@ -358,7 +358,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         vaxrank_config parameters.vaxrank_include_mismatches_after_variant in
       return (
         Bfx.vaxrank ~configuration somatic_vcfs rna_bam
-          `NetMHCcons alleles
+          parameters.Parameters.binding_predictor alleles
         |> Bfx.save "Vaxrank"
       )
     in

@@ -44,7 +44,8 @@ type t = {
     [@opaque]
     [@default `NetMHCcons]
     [@enum
-      ["netmhcpan", `NetMHCpan ; "netmhccons", `NetMHCcons; "random", `Random;]]
+      ["netmhcpan", `NetMHCpan ; "netmhccons", `NetMHCcons;
+       "random", `Random; "netmhc", `NetMHC]]
   (** Which binding predictor to use for Vaxrank and Topiary. *)
 
   (* NOTIFICATIONS: *)

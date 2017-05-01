@@ -30,7 +30,7 @@ type t = {
       [@name "without-bwa-mem-optimized"];
   (** Don't use the optimized workflow-node for bwa-mem \
       (i.e. bam2fq + align + sort + to-bam). *)
-  experiment_name: string [@main] [@aka ["E"]];
+  experiment_name: string [@main] [@cmdliner.pos 0];
   (** Give a name to the run(s). *)
   mhc_alleles: string list option; [@docv "ALLELE1,ALLELE2,..."]
   (** Run epitope binding prediction pipeline with the given list \
@@ -113,12 +113,11 @@ let construct_run_directory param =
 (** This sets the reference_build of the BAMs (if the input are BAMs), and
     represents the BAM (if it's a BAM) as a FASTQ (so that it'll be
     automatically converted to a FASTQ and realigned), if `realign_bam=true` in
-    the Paramaters.t. If this is a JSON blob or these are FASTQs, it leaves them
-    alone.
+    the Paramaters.t. If these are FASTQs, it leaves them alone.
 
     This is necessary because some information for processing these inputs are
     passed along with them in the CLI, so we don't have the information at CLI
-    parsing time. *)
+    parsing time, and must set it when running the pipeline. *)
 let normalize_inputs
     ({ normal_inputs; tumor_inputs; rna_inputs;
        realign_bams; reference_build;

@@ -299,9 +299,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
   let run parameters =
     let open Parameters in
-    let normal_inputs = Parameters.normal_inputs parameters in
-    let tumor_inputs = Parameters.tumor_inputs parameters in
-    let rna_inputs = Parameters.rna_inputs parameters in
+    let parameters = normalize_inputs parameters in
+    let { normal_inputs; tumor_inputs; rna_inputs; _ } = parameters in
     let rna_fastqs = Option.map ~f:get_named_fastqs rna_inputs in
     let normal_fastqs = get_named_fastqs normal_inputs in
     let tumor_fastqs = get_named_fastqs tumor_inputs in

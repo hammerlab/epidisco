@@ -11,6 +11,8 @@ module Options = struct
     (** Output the pipeline as a PNG file. *)
   } [@@deriving cmdliner,make]
 
+  let default = make ~dry_run:false ()
+
   let cmdf fmt =
   ksprintf (fun s ->
       match Sys.command s with

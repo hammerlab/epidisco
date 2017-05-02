@@ -4,11 +4,14 @@ module String = Sosa.Native_string
 
 type t = {
   (* SAMPLES *)
-  normal_inputs: string list; [@docs "SAMPLES"]
+  normal_inputs: Input.t list; [@docs "SAMPLES"]
+    [@conv (Input.conv ~kind:"normal")]
   (** Normal sample(s) for the pipeline. *)
-  tumor_inputs: string list; [@docs "SAMPLES"]
+  tumor_inputs: Input.t list; [@docs "SAMPLES"]
+    [@conv (Input.conv ~kind:"tumor")]
   (** Tumor sample(s) for the pipeline. *)
-  rna_inputs: string list option; [@docs "SAMPLES"]
+  rna_inputs: Input.t list option; [@docs "SAMPLES"]
+    [@conv (Input.conv ~kind:"rna")]
   (** RNA sample(s) for the pipeline. *)
 
   (* OPTIONS *)
@@ -27,7 +30,7 @@ type t = {
       [@name "without-bwa-mem-optimized"];
   (** Don't use the optimized workflow-node for bwa-mem \
       (i.e. bam2fq + align + sort + to-bam). *)
-  experiment_name: string [@main] [@aka ["E"]];
+  experiment_name: string [@main] [@cmdliner.pos 0];
   (** Give a name to the run(s). *)
   mhc_alleles: string list option; [@docv "ALLELE1,ALLELE2,..."]
   (** Run epitope binding prediction pipeline with the given list \
@@ -41,7 +44,9 @@ type t = {
   (** Run bedtools intersect on VCFs with the given bed file. file://... or
       http(s)://... *)
   binding_predictor: Biokepi.Tools.Topiary.predictor_type;
-    [@opaque]
+    [@show.opaque]
+      (* TODO: Didn't write a formatter for this, so ppx_deriving_show doesn't
+         know how to print it. Hence @opaque. *)
     [@default `NetMHCcons]
     [@enum
       ["netmhcpan", `NetMHCpan ; "netmhccons", `NetMHCcons;
@@ -83,124 +88,6 @@ type t = {
 } [@@deriving cmdliner,show,make]
 
 
-let or_fail msg = function
-| `Ok o -> o
-| `Error s -> ksprintf failwith "%s: %s" msg s
-
-let biokepi_input_of_string ~realign_bams ~prefix ~reference_build s =
-  let open Biokepi.EDSL.Library.Input in
-  let file_type =
-    let check = Filename.check_suffix s in
-    if (check ".bam" && (not realign_bams))       then `Bam_no_realign
-    else if check ".bam"                          then `Bam
-    else if (check ".fastq" || check ".fastq.gz") then `Fastq
-    else                                               `Json
-  in
-  (* Beside serialized sample description files, we also would like to
-     capture direct paths to the BAMs/FASTQs to make it easier for the user
-     to submit samples. Each comma-separated BAM or FASTQ (paired or
-     single-ended) will be treated as an individual sample before being
-     merged into the single tumor/normal the rest of the pipeline deals
-     with.
-
-     Examples
-     - JSON file: /path/to/sample.json
-     - BAM file: https://url.to/my.bam
-     - Single-end FASTQ: /path/to/single.fastq.gz,..
-     - Paired-end FASTQ: /p/t/pair1.fastq@/p/t/pair2.fastq,..
-     ...
-  *)
-  match file_type with
-  | `Bam_no_realign -> begin
-      let sample_name =
-        prefix ^ "-" ^ Filename.(chop_extension s |> basename)
-      in
-      bam_sample ~sample_name ~how:`PE ~reference_build s
-    end
-  | `Bam -> begin
-      let sample_name =
-        prefix ^ "-" ^ Filename.(chop_extension s |> basename)
-      in
-      fastq_sample ~sample_name [fastq_of_bam ~reference_build `PE s]
-    end
-  | `Fastq ->  begin
-      match (String.split ~on:(`Character '@') s) with
-      | [ pair1; pair2; ] ->
-        let sample_name =
-          let chop f = Filename.(chop_extension f |> basename) in
-          sprintf "%s-%s-%s" prefix (chop pair1) (chop pair2)
-        in
-        fastq_sample ~sample_name [pe pair1 pair2]
-      | [ single_end; ] ->
-        let sample_name =
-          sprintf "%s-%s" prefix Filename.(chop_extension s |> basename)
-        in
-        fastq_sample ~sample_name [se single_end]
-      | _ -> failwith "Couldn't parse FASTQ path."
-    end
-  | `Json ->
-    Yojson.Safe.from_file s |> of_yojson |> or_fail (prefix ^ "-json")
-
-
-let biokepi_inputs_of_strings ~kind ~realign_bams ~reference_build ss =
-  let of_string = biokepi_input_of_string ~reference_build ~realign_bams in
-  List.mapi ss ~f:(fun i f ->
-      let prefix = kind ^ (Int.to_string i) in
-      of_string ~prefix f)
-
-
-let biokepi_input_to_string t =
-  let open Biokepi.EDSL.Library.Input in
-  let fragment =
-    function
-    | (_, PE (r1, r2)) -> sprintf "Paired-end FASTQ"
-    | (_, SE r) -> sprintf "Single-end FASTQ"
-    | (_, Of_bam (`SE,_,_, p)) -> "Single-end-from-bam"
-    | (_, Of_bam (`PE,_,_, p)) -> "Paired-end-from-bam"
-  in
-  let same_kind a b =
-    match a, b with
-    | (_, PE _)              , (_, PE _)               -> true
-    | (_, SE _)              , (_, SE _)               -> true
-    | (_, Of_bam (`SE,_,_,_)), (_, Of_bam (`SE,_,_,_)) -> true
-    | (_, Of_bam (`PE,_,_,_)), (_, Of_bam (`PE,_,_,_)) -> true
-    | _, _ -> false
-  in
-  match t with
-  | Bam {bam_sample_name; _ } -> sprintf "Bam %s" bam_sample_name
-  | Fastq { fastq_sample_name; files } ->
-    sprintf "%s, %s"
-      fastq_sample_name
-      begin match files with
-      | [] -> "NONE"
-      | [one] ->
-        sprintf "1 fragment: %s" (fragment one)
-      | one :: more ->
-        sprintf "%d fragments: %s"
-          (List.length more + 1)
-          (if List.for_all more ~f:(fun f -> same_kind f one)
-           then "all " ^ (fragment one)
-           else "heterogeneous")
-      end
-
-
-let normal_inputs t =
-  biokepi_inputs_of_strings ~kind:"normal" ~realign_bams:t.realign_bams
-    ~reference_build:t.reference_build t.normal_inputs
-
-
-let tumor_inputs t =
-  biokepi_inputs_of_strings ~kind:"tumor" ~realign_bams:t.realign_bams
-    ~reference_build:t.reference_build t.tumor_inputs
-
-
-let rna_inputs t =
-  let open Option in
-  t.rna_inputs >>= fun inputs ->
-  return (biokepi_inputs_of_strings ~kind:"normal" ~realign_bams:t.realign_bams
-            ~reference_build:t.reference_build inputs)
-
-
 let construct_run_name params =
   let {normal_inputs;  tumor_inputs; rna_inputs;
        experiment_name; reference_build; _} = params in
@@ -223,6 +110,38 @@ let construct_run_directory param =
   sprintf "%s-%s" param.experiment_name param.reference_build
 
 
+(** This sets the reference_build of the BAMs (if the input are BAMs), and
+    represents the BAM (if it's a BAM) as a FASTQ (so that it'll be
+    automatically converted to a FASTQ and realigned), if `realign_bam=true` in
+    the Paramaters.t. If these are FASTQs, it leaves them alone.
+
+    This is necessary because some information for processing these inputs are
+    passed along with them in the CLI, so we don't have the information at CLI
+    parsing time, and must set it when running the pipeline. *)
+let normalize_inputs
+    ({ normal_inputs; tumor_inputs; rna_inputs;
+       realign_bams; reference_build;
+       _ } as params) =
+  let normalize_input i =
+    let open Input in
+    match i with
+    | Bam ({ bam_sample_name; path; how; _ } as bam) ->
+      begin match realign_bams with
+      | true -> Fastq {
+          fastq_sample_name = bam_sample_name;
+          files = [None, Of_bam (how, None, reference_build, path)]
+        }
+      | false -> Bam { bam with reference_build }
+      end
+    | Fastq _ -> i
+  in
+  let normal_inputs = List.map ~f:normalize_input normal_inputs in
+  let tumor_inputs = List.map ~f:normalize_input tumor_inputs in
+  let rna_inputs =
+    Option.map rna_inputs (fun rs -> List.map ~f:normalize_input rs) in
+  { params with normal_inputs; tumor_inputs; rna_inputs; }
+
+
 let metadata t = [
   "MHC Alleles",
   begin match t.mhc_alleles  with
@@ -231,13 +150,12 @@ let metadata t = [
   end;
   "Reference-build", t.reference_build;
   "Normal-inputs",
-  List.map ~f:biokepi_input_to_string (normal_inputs t) |> String.concat;
+  List.map ~f:Input.to_string (t.normal_inputs) |> String.concat;
   "Tumor-inputs",
-  List.map ~f:biokepi_input_to_string (tumor_inputs t) |> String.concat;
+  List.map ~f:Input.to_string (t.tumor_inputs) |> String.concat;
   "RNA-inputs",
   Option.value_map
     ~default:"none"
-    ~f:(fun r -> List.map ~f:biokepi_input_to_string r |> String.concat)
-    (rna_inputs t);
+    ~f:(fun r -> List.map ~f:Input.to_string r |> String.concat)
+    (t.rna_inputs);
 ]
-

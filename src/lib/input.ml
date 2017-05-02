@@ -103,6 +103,41 @@ let to_string t =
            else "heterogeneous")
       end
 
+(** Given a passwordless SSH host name (configured in e.g. your .ssh/config), a
+    sample name, and a directory on that host, create a Input.t FASTQ of the
+    paired-end FASTQ(.gzs) within that directory.  *)
+let of_directory ~host_name ~sample_name directory =
+  let host = match Ketrew_pure.Host.of_string host_name with
+  | `Ok host -> host
+  | `Error msg -> failwith (sprintf "Error parsing host \"%s\".\n%!" host_name)
+  in
+  let open Pvem_lwt_unix.Deferred_result in
+  Derive.fastqs ~host:host directory
+  >>= fun fqs ->
+  return @@ fastq_sample ~sample_name fqs
+
+
+let of_directory_exn ~host_name ~sample_name dir =
+  let res =
+    of_directory ~host_name ~sample_name dir in
+  match Lwt_main.run res with
+  | `Ok res -> res
+  | `Error err ->
+    begin match err with
+    | `Host hosterr ->
+      failwith ("Host could not be used: " ^
+                (Ketrew.Host_io.Error.log hosterr
+                 |> Ketrew_pure.Internal_pervasives.Log.to_long_string))
+    | `Multiple_flowcells flowcells ->
+      failwith (sprintf "Too many flowcells detected (can't handle multiple)\
+                         : '%s'\n%!"
+                  (String.concat ~sep:"," flowcells))
+    | `Re_group_error msg -> failwith msg
+    | `R2_expected_for_r1 r1 ->
+      failwith (sprintf "Didn't find an r2 for r1 %s" r1)
+    end
+
+
 let conv ~kind =
   (* the reference & realigning are set here to defaults, since they aren't
      known at the time of this conversion. They are reset to the parameterized

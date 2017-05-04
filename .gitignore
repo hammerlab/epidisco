@@ -1,6 +1,3 @@
 .merlin
-.omakedb
-.omakedb.lock
-OMakeroot.omc
-OMakeLibrary.omc
 _build/
+.ocamlinit

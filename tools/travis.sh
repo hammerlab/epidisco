@@ -60,6 +60,7 @@ opam install --yes epidisco
 echo "Setting Warn-Error for the Travis test"
 export OCAMLPARAM="warn-error=A,_"
 
-omake clean
-omake build-all
+make clean
+make
+
 

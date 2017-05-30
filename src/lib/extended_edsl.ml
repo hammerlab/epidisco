@@ -2,9 +2,9 @@ open Nonstd
 
 module To_json_with_mem (Memory: Save_result.Compilation_memory) = struct
   include Biokepi.EDSL.Compile.To_json
-  let save key x ~var_count =
+  let save ~name x ~var_count =
     let compiled = x ~var_count in
-    Memory.add_json key compiled;
+    Memory.add_json name compiled;
     compiled
   include Final_report.To_json
   include Qc.EDSL.To_json

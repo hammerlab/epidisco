@@ -8,13 +8,13 @@ module type Semantics = sig
 
   type 'a any
   val save :
-    string ->
+    name: string ->
     'a any ->
     'a any
 end
 
 module Do_nothing = struct
-  let save _ x = x
+  let save ~name x = x
 end
 
 let construct_relative_path ~work_dir original_path =
@@ -162,7 +162,8 @@ module To_workflow
 
   open Biokepi.EDSL.Compile.To_workflow.File_type_specification
 
-  let save : string -> t -> t = fun key x ->
+  let save ~name x =
+    let key = name in
     let saved ?(gzip = false) ?(is_directory = false) ?name path wf =
       object
         method path = path

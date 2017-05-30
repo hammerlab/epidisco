@@ -167,11 +167,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
 
 
   let seq2hla_hla fqs =
-    Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save "Seq2HLA"
+    Bfx.seq2hla (Bfx.concat fqs) |> Bfx.save ~name:"Seq2HLA"
 
 
   let optitype_hla fqs ftype name =
-    Bfx.optitype ftype (Bfx.concat fqs) |> Bfx.save ("OptiType-" ^ name)
+    Bfx.optitype ftype (Bfx.concat fqs) |> Bfx.save ~name:("OptiType-" ^ name)
 
 
   let run_kallisto ~reference_build ~rna_samples () =
@@ -181,7 +181,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         name, fq
         |> Bfx.concat
         |> Bfx.kallisto ~reference_build
-        |> Bfx.save name)
+        |> Bfx.save ~name)
       (get_named_fastqs rna_samples)
 
 
@@ -198,9 +198,9 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       then Some (run_kallisto ~reference_build ~rna_samples ())
       else None
     in
-    { rna_bam = bam |> Bfx.save "rna-bam";
-      stringtie = bam |> Bfx.stringtie |> Bfx.save "stringtie";
-      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save "rna-bam-flagstat";
+    { rna_bam = bam |> Bfx.save ~name:"rna-bam";
+      stringtie = bam |> Bfx.stringtie |> Bfx.save ~name:"stringtie";
+      rna_bam_flagstat = bam |> Bfx.flagstat |> Bfx.save ~name:"rna-bam-flagstat";
       kallisto; }
 
 
@@ -213,7 +213,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       List.map
         ~f:(fun (sname, fq) ->
           let qcname = sprintf "QC: %s-%s" stype sname in
-          qcname, fastqc_pipeline fq |> Bfx.save qcname)
+          qcname, fastqc_pipeline fq |> Bfx.save ~name:qcname)
         samples
     in
     let normal_fastqcs = run_named_fastqc "normal" normal_fastqs in
@@ -311,7 +311,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         ~parameters
         ~normal:(normal_inputs |> to_bam)
         ~tumor:(tumor_inputs |> to_bam)
-      |> (fun (n, t) -> Bfx.save "normal-bam" n, Bfx.save "tumor-bam" t)
+      |> (fun (n, t) -> Bfx.save ~name:"normal-bam" n, Bfx.save ~name:"tumor-bam" t)
     in
     let bedfile = parameters.bedfile in
     let vcfs =
@@ -344,7 +344,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       >>= fun alleles ->
       return (
         Bfx.topiary somatic_vcfs parameters.Parameters.binding_predictor alleles
-        |> Bfx.save "Topiary"
+        |> Bfx.save ~name:"Topiary"
       )
     in
     let vaxrank =
@@ -358,7 +358,7 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       return (
         Bfx.vaxrank ~configuration somatic_vcfs rna_bam
           parameters.Parameters.binding_predictor alleles
-        |> Bfx.save "Vaxrank"
+        |> Bfx.save ~name:"Vaxrank"
       )
     in
     let {normal_fastqcs; tumor_fastqcs; rna_fastqcs} as fastqc_results =
@@ -369,8 +369,8 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       @ fastqc_results.tumor_fastqcs
       @ Option.value ~default:[] fastqc_results.rna_fastqcs in
     let normal_bam_flagstat, tumor_bam_flagstat =
-      Bfx.flagstat normal_bam |> Bfx.save "normal-bam-flagstat",
-      Bfx.flagstat tumor_bam |> Bfx.save "tumor-bam-flagstat"
+      Bfx.flagstat normal_bam |> Bfx.save ~name:"normal-bam-flagstat",
+      Bfx.flagstat tumor_bam |> Bfx.save ~name:"tumor-bam-flagstat"
     in
     let emails =
       email_pipeline ?rna_results

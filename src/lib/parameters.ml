@@ -43,7 +43,7 @@ type t = {
   bedfile: string option; [@aka ["filter-vcfs-to-region-with"]]
   (** Run bedtools intersect on VCFs with the given bed file. file://... or
       http(s)://... *)
-  binding_predictor: Biokepi.Tools.Topiary.predictor_type;
+  binding_predictor: Biokepi_run_environment.Hla_utilities.predictor_type;
     [@show.opaque]
       (* TODO: Didn't write a formatter for this, so ppx_deriving_show doesn't
          know how to print it. Hence @opaque. *)

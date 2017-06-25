@@ -113,8 +113,8 @@ let pipeline_term ~biokepi_machine ~version ?work_directory cmd =
     [ `S "SAMPLES";
       `P "The sample data (tumor DNA, normal DNA, and, optionally, tumor RNA) \
           to be passed into the pipeline.";
-      `P "Use a comma (,) as a delimiter to provide multiple data files
-         and an ampersand (@) when describing paired-end FASTQ files.";
+      `P "Use a comma (,) as a delimiter to provide multiple data files \
+          and an ampersand (@) when describing paired-end FASTQ files.";
       `P "Examples"; `Noblank;
       `P "- JSON file: file://path/to/sample.json"; `Noblank;
       `P "- BAM file: https://url.to/my.bam"; `Noblank;

@@ -184,7 +184,7 @@ workflow.
 
 We tested this
 on a Google Cloud `n1-highmem-32` node (32 vCPUs, 208 GB memory)
-with a 2 TB hard disk.
+with a 3 TB hard disk.
 Together with a quite conservative setting: `coclobas_max_jobs=8`.
 
 If your host is smaller (memory *or* CPU) allow less jobs to run in parallel

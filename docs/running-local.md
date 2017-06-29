@@ -22,7 +22,7 @@ Get Secotrec-local
 the infrastructure needed to run Epidisco. We need to download the application:
 
     mkdir ~/bin/
-    wget -O ~/bin/secotrec-local https://storage.googleapis.com/smondet-experiments/secotrec-local-Linux-x86_64-03
+    wget -O ~/bin/secotrec-local https://storage.googleapis.com/smondet-experiments/secotrec-local-Linux-x86_64
     chmod +x ~/bin/secotrec-local
     export PATH=~/bin:$PATH
 
@@ -52,13 +52,6 @@ file and source it, or just paste them in your shell:
 You check that the configuration is taken into account:
 
     secotrec-local print-conf
-
-You need this set up (the first time, for now):
-
-    mkdir -p $epidisco_dev
-    chmod -R 777 $epidisco_dev
-    mkdir -p /tmp/secotrec-local-shared-temp
-    chmod -R 777 /tmp/secotrec-local-shared-temp
 
 Then you can launch the setup:
 

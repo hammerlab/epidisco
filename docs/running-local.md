@@ -1,5 +1,5 @@
-Running On a Local (Big) Machine
-================================
+Running On a Single Machine
+===========================
 
 Prerequisites
 -------------
@@ -18,7 +18,8 @@ For example on Ubuntu 16.04 (LTS):
 Get Secotrec-local
 ------------------
 
-Then we get the `secotrec-local` application:
+[Secotrec](https://github.com/hammerlab/secotrec)-local is tool that can deploy
+the infrastructure needed to run Epidisco. We need to download the application:
 
     mkdir ~/bin/
     wget -O ~/bin/secotrec-local https://storage.googleapis.com/smondet-experiments/secotrec-local-Linux-x86_64-03
@@ -69,8 +70,9 @@ Check the status of the deployment with:
 
     secotrec-local status
 
-Using the hostname or IP address of your host, you can access the Ketrew WebUI
-at (using the auth-token you defined above):
+Using the hostname or IP address of your host, you can
+access [Ketrew](https://github.com/hammerlab/ketrew)'s (the workflow manager)
+WebUI at (using the auth-token you defined above):
 
 `https:// ... /gui?token=dsleaijdej308098ddecja9c8jra8cjrf98r`
 
@@ -78,7 +80,10 @@ at (using the auth-token you defined above):
 Submit a First Epidisco Run
 ---------------------------
 
-Let's generate the Biokepi “infrastructure” configuration:
+Let's generate the “infrastructure” configuration for Epidisco,
+`biokepi_machine.ml` (named after
+the [Biokepi](https://github.com/hammerlab/biokepi) project which provides the
+basic reusable building blocs that make up Epidisco):
 
     secotrec-local biokepi-machine $epidisco_dev/biokepi_machine.ml
 
@@ -188,7 +193,7 @@ If your host is smaller (memory *or* CPU) allow less jobs to run in parallel
 Still, some individual jobs may be very memory-greedy (e.g. variant callers
 working on high-coverage areas).
 
-### I Want To Run With My Own Data But With HTTP(S) URLs
+### I Want To Run With My Own Data But Not With HTTP(S) URLs
 
 You can put your input files (FASTQ or Bam) somewhere in the
 `$biokepi_work` directory, but from the docker-containers' point of view the

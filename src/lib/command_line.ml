@@ -37,9 +37,6 @@ let run_pipeline
     client_options
     params =
   let run_name = Parameters.construct_run_name params in
-  let module Mem = Save_result.Mem () in
-  let module P2json = Pipeline.Full(Extended_edsl.To_json_with_mem(Mem)) in
-  let (_ : Yojson.Basic.json) = P2json.run params in
   let dot_content =
     let module P2dot =
       Pipeline.Full(Extended_edsl.Apply_functions(Extended_edsl.To_dot)) in
@@ -74,7 +71,6 @@ let run_pipeline
       Parameters.construct_run_directory params
     | Some w -> w
   in
-  Mem.save_dot_content dot_content;
   let module Workflow_compiler =
     Extended_edsl.To_workflow
       (struct
@@ -82,14 +78,15 @@ let run_pipeline
         let machine = biokepi_machine
         let work_dir = work_directory
         let run_name = run_name
-        let saving_path = params.Parameters.results_path // run_name
+        let dot_content = dot_content
+        let results_dir =
+          Some (params.Parameters.results_path // run_name)
       end)
-      (Mem)
   in
   let module Ketrew_pipeline_1 = Pipeline.Full(Workflow_compiler) in
   let workflow_1 =
     Ketrew_pipeline_1.run params
-    |> Qc.EDSL.Extended_file_spec.get_unit_workflow
+    |> Biokepi.EDSL.Compile.To_workflow.get_workflow
       ~name:(sprintf "Epidisco: %s %s"
                params.Parameters.experiment_name run_name)
   in

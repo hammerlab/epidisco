@@ -3,8 +3,6 @@ open Nonstd
 module String = Sosa.Native_string
 let (//) = Filename.concat
 
-let dbg fmt = ksprintf (eprintf "EpiDebug: %s\n%!") fmt
-
 (** Makes the below equivalent.
 
 {[let x = canonicalize "/dsde/deds///desd//de/des/"
@@ -327,7 +325,6 @@ module To_workflow
         ~name:"dummy" ()
       |> Filename.dirname
     in
-    dbg "saving_base_path: %s" saving_base_path;
     let relative_to_results path =
       let prefix_length = String.length saving_base_path in
       match String.sub path ~index:0 ~length:prefix_length with
@@ -431,7 +428,6 @@ module To_workflow
       let thing = relative_to_results path in
       let json =
         String.take_while thing ~f:((<>) '/') ^ ".json" in
-      dbg "path : %s\n  Relative path: %s\n  JSON: %s" path thing json;
       (thing, json)
     in
     let list_item ?(with_json = false) ?(with_gzip = false) title path =

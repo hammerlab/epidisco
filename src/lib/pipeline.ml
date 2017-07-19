@@ -363,10 +363,13 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       let open Option in
       mhc_alleles
       >>= fun alleles ->
-      return (
-        Bfx.topiary somatic_vcfs parameters.Parameters.binding_predictor alleles
-        |> save_through ~name:"Topiary"
-      )
+      if parameters.Parameters.with_topiary
+      then
+        return (
+          Bfx.topiary somatic_vcfs parameters.Parameters.binding_predictor alleles
+          |> save_through ~name:"Topiary"
+        )
+      else None
     in
     let vaxrank =
       let open Option in

@@ -37,9 +37,14 @@ let run_pipeline
     client_options
     params =
   let run_name = Parameters.construct_run_name params in
+  let module Optimizer(B : Extended_edsl.Semantics) =
+    (** Extra-safe, two passes of applying functions so that PNGs and
+        JSONs look nice (optimization is a no-op in the [To_workflow]
+        case). *)
+    Extended_edsl.Apply_functions(Extended_edsl.Apply_functions(B)) in
   let dot_content =
     let module P2dot =
-      Pipeline.Full(Extended_edsl.Apply_functions(Extended_edsl.To_dot)) in
+      Pipeline.Full(Optimizer(Extended_edsl.To_dot)) in
     let dot_parameters = {
       Biokepi.EDSL.Compile.To_dot.
       color_input = begin fun ~name ~attributes ->
@@ -83,7 +88,8 @@ let run_pipeline
           Some (params.Parameters.results_path // run_name)
       end)
   in
-  let module Ketrew_pipeline_1 = Pipeline.Full(Workflow_compiler) in
+  let module Ketrew_pipeline_1 =
+    Pipeline.Full(Optimizer(Workflow_compiler)) in
   let workflow_1 =
     Ketrew_pipeline_1.run params
     |> Biokepi.EDSL.Compile.To_workflow.get_workflow

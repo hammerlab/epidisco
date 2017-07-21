@@ -1,18 +1,7 @@
 open Nonstd
 
-module To_json_with_mem (Memory: Save_result.Compilation_memory) = struct
-  include Biokepi.EDSL.Compile.To_json
-  let save ~name x ~var_count =
-    let compiled = x ~var_count in
-    Memory.add_json name compiled;
-    compiled
-  include Final_report.To_json
-  include Qc.EDSL.To_json
-end
-
 module type Semantics = sig
   include Biokepi.EDSL.Semantics
-  include Save_result.Semantics with type 'a any := 'a repr
   include Final_report.Semantics with type 'a repr := 'a repr
   include Qc.EDSL.Semantics with type 'a repr := 'a repr
 end
@@ -20,34 +9,29 @@ end
 module To_workflow
     (Config : sig
        include Biokepi.EDSL.Compile.To_workflow.Compiler_configuration
-       val saving_path : string
+       val dot_content : string
        val run_name : string
      end)
-    (Mem : Save_result.Compilation_memory)
 = struct
   include Biokepi.EDSL.Compile.To_workflow.Make(Config)
-  include Save_result.To_workflow(Config)(Mem)
-  include Final_report.To_workflow(Config)(Mem)
+  include Final_report.To_workflow(Config)
   include Qc.EDSL.To_workflow(Config)
 end
 
 module To_json = struct
   include Biokepi.EDSL.Compile.To_json
-  include Save_result.Do_nothing
   include Final_report.To_json
   include Qc.EDSL.To_json
 end
 
 module To_dot = struct
   include Biokepi.EDSL.Compile.To_dot
-  include Save_result.Do_nothing
   include Final_report.To_dot
   include Qc.EDSL.To_dot
 end
 
 module Apply_functions (B : Semantics) = struct
   include Biokepi.EDSL.Transform.Apply_functions(B)
-  include Save_result.Do_nothing
 
   let flagstat_email ~normal ~tumor ?rna email_options =
     let open The_pass.Transformation in

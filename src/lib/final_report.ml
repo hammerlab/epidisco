@@ -3,7 +3,6 @@ open Nonstd
 module String = Sosa.Native_string
 let (//) = Filename.concat
 
-
 (** Makes the below equivalent.
 
 {[let x = canonicalize "/dsde/deds///desd//de/des/"
@@ -51,24 +50,24 @@ module type Semantics = sig
   type 'a repr
   val report :
     ?igv_url_server_prefix: string ->
-    vcfs:(string * [ `Vcf ] repr) list ->
-    fastqcs:(string * [ `Fastqc ] repr) list ->
-    normal_bam: [ `Bam ] repr ->
-    normal_bam_flagstat: [ `Flagstat ] repr ->
-    tumor_bam: [ `Bam ] repr ->
-    tumor_bam_flagstat: [ `Flagstat ] repr ->
-    ?optitype_normal: [ `Optitype_result ] repr ->
-    ?optitype_tumor: [ `Optitype_result ] repr ->
-    ?optitype_rna: [ `Optitype_result ] repr ->
-    ?rna_bam: [ `Bam ] repr ->
-    ?vaxrank: [ `Vaxrank ] repr ->
-    ?rna_bam_flagstat: [ `Flagstat ] repr ->
-    ?topiary: [ `Topiary ] repr ->
-    ?isovar : [ `Isovar ] repr ->
-    ?seq2hla: [ `Seq2hla_result ] repr ->
-    ?stringtie: [ `Gtf ] repr ->
+    vcfs:(string * [ `Saved of [ `Vcf ] ] repr) list ->
+    fastqcs:(string * [ `Saved of [ `Fastqc ] ] repr) list ->
+    normal_bam: [ `Saved of [ `Bam ] ] repr ->
+    normal_bam_flagstat: [ `Saved of [ `Flagstat ] ] repr ->
+    tumor_bam: [ `Saved of [ `Bam ] ] repr ->
+    tumor_bam_flagstat: [ `Saved of [ `Flagstat ] ] repr ->
+    ?optitype_normal: [ `Saved of [ `Optitype_result ] ] repr ->
+    ?optitype_tumor: [ `Saved of [ `Optitype_result ] ] repr ->
+    ?optitype_rna: [ `Saved of [ `Optitype_result ] ] repr ->
+    ?rna_bam: [ `Saved of [ `Bam ] ] repr ->
+    ?vaxrank: [ `Saved of [ `Vaxrank ] ] repr ->
+    ?rna_bam_flagstat: [ `Saved of [ `Flagstat ] ] repr ->
+    ?topiary: [ `Saved of [ `Topiary ] ] repr ->
+    ?isovar : [ `Saved of [ `Isovar ] ] repr ->
+    ?seq2hla: [ `Saved of [ `Seq2hla_result ] ] repr ->
+    ?stringtie: [ `Saved of [ `Gtf ] ] repr ->
     ?bedfile: string ->
-    ?kallisto:(string * [ `Kallisto_result ] repr) list ->
+    ?kallisto:(string * [ `Saved of [ `Kallisto_result ] ] repr) list ->
     metadata: (string * string) list ->
     string ->
     unit repr
@@ -236,12 +235,12 @@ let testing = ref false
 module To_workflow
     (Config : sig
        include Biokepi.EDSL.Compile.To_workflow.Compiler_configuration
-       val saving_path : string
+       val dot_content : string
      end)
-    (Mem : Save_result.Compilation_memory)
 = struct
 
   open Extend_file_spec
+  open Biokepi.EDSL.Compile.To_workflow.Annotated_file
 
   let append_to ~file:fff str =
     let open Ketrew.EDSL in
@@ -282,6 +281,20 @@ module To_workflow
     ] in
     Program.(make_png && append_dirty_to piece_of_website ~file:html_file)
 
+  let get_bam b = get_file b |> get_bam
+  let get_vcf b = get_file b |> get_vcf
+  let get_flagstat_result b = get_file b |> get_flagstat_result
+  let get_cufflinks_result b = get_file b |> get_cufflinks_result
+  let get_fastqc_result b = get_file b |> get_fastqc_result
+  let get_optitype_result b = get_file b |> get_optitype_result
+  let get_seq2hla_result b = get_file b |> get_seq2hla_result
+  let get_vaxrank_result b = get_file b |> get_vaxrank_result
+  let get_topiary_result b = get_file b |> get_topiary_result
+  let get_isovar_result b = get_file b |> get_isovar_result
+  let get_bed b = get_file b |> get_bed
+  let get_kallisto_result b = get_file b |> get_kallisto_result
+  let get_gtf b = get_file b |> get_gtf
+
   let report
       ?igv_url_server_prefix
       ~vcfs
@@ -306,43 +319,54 @@ module To_workflow
       run_name =
     let open Ketrew.EDSL in
     let host = Biokepi.Machine.as_host Config.machine in
-    let product =
-      (single_file ~host (Config.saving_path // sprintf "index.html")) in
-    let opt_prefix p =
-      let open Option in
-      (* Want to make sure we don't end up with a url like http://example.com/./something *)
-      let p = try String.chop_prefix_exn p ~prefix:"./" with _ -> p in
-      let prefix = igv_url_server_prefix >>= fun p ->
-        match String.chop_suffix ~suffix:"/" p with
-        | None -> return p
-        | a -> a in
-      match prefix with
-      | None -> p
-      | Some prefix -> Filename.concat prefix p
+    let saving_base_path =
+      Biokepi.EDSL.Compile.To_workflow.Saving_utilities.base_path
+        ?results_dir:Config.results_dir ~work_dir:Config.work_dir
+        ~name:"dummy" ()
+      |> Filename.dirname
     in
+    let relative_to_results path =
+      let prefix_length = String.length saving_base_path in
+      match String.sub path ~index:0 ~length:prefix_length with
+      | Some p when p = saving_base_path ->
+        let index =
+          match path.[0] with
+          | Some '/' -> prefix_length + 1
+          | Some _ -> prefix_length
+          | None -> ksprintf failwith "Path %S should not be empty?" path
+        in
+        String.sub_exn path ~index ~length:(String.length path - index)
+      | Some _ | None ->
+        ksprintf failwith "ERROR: %s is not a prefix of %s"
+          saving_base_path path
+    in
+    let product =
+      single_file ~host (saving_base_path // "index.html") in
     let igv_dot_xml =
-      let normal_bam_path =
-        Save_result.construct_relative_path
-          ~work_dir:Config.work_dir (get_bam normal_bam)#product#path
-        |> opt_prefix in
-      let tumor_bam_path =
-        Save_result.construct_relative_path
-          ~work_dir:Config.work_dir (get_bam tumor_bam)#product#path
-        |> opt_prefix in
-      let rna_bam_path =
-        Option.map rna_bam ~f:(fun b ->
-            Save_result.construct_relative_path
-              ~work_dir:Config.work_dir (get_bam b)#product#path
-            |> opt_prefix) in
+      let opt_prefix p =
+        let open Option in
+        let prefix =
+          igv_url_server_prefix
+          >>= fun p ->
+          match String.chop_suffix ~suffix:"/" p with
+          | None -> return p
+          | a -> a in
+        match prefix with
+        | None -> "./" ^ p
+        | Some prefix -> Filename.concat prefix p
+      in
+      let bam_uri bam =
+        relative_to_results (get_bam bam)#product#path |> opt_prefix in
+      let normal_bam_path = bam_uri normal_bam in
+      let tumor_bam_path = bam_uri tumor_bam in
+      let rna_bam_path = Option.map rna_bam ~f:bam_uri in
+      let vcf_uri vcf =
+        relative_to_results (get_vcf vcf)#product#path |> opt_prefix in
       let vcfs =
         List.map vcfs ~f:(fun (name, vcf) ->
-          Biokepi.Tools.Igvxml.vcf ~name
-            ~path:(Save_result.construct_relative_path
-                     ~work_dir:Config.work_dir (get_vcf vcf)#product#path
-                   |> opt_prefix))
-      in
+            Biokepi.Tools.Igvxml.vcf ~name ~path:(vcf_uri vcf)) in
       Biokepi.Tools.Igvxml.run ~run_with:Config.machine
-        ~output_path:(Config.saving_path // sprintf "local-igv-%s.xml" run_name)
+        ~output_path:(saving_base_path // sprintf "local-igv-%s.xml" run_name)
         ~reference_genome:(get_bam normal_bam)#product#reference_build
         ~run_id:run_name
         ~normal_bam_path
@@ -385,20 +409,6 @@ module To_workflow
         @ opt seq2hla get_seq2hla_result
         @ opt stringtie get_gtf
         @ mopt kallisto get_kallisto_result
-        @ List.concat_map (Mem.all_to_save ()) ~f:(fun (key, savs) ->
-            List.map savs ~f:(fun s ->
-                let open Config in
-                let json_pipeline = Mem.look_up_json key in
-                let run_with = machine in
-                let gzip = s#gzip in
-                let is_directory = s#is_directory in
-                let name = s#name in
-                Save_result.make_saving_node
-                  ~saving_path ~json_pipeline ~key ~run_with ~work_dir
-                  ~gzip ~is_directory ~name s#edge s#path
-                |> depends_on
-              )
-          )
     in
     let title = "Epidisco Report" in
     let header =
@@ -415,13 +425,11 @@ module To_workflow
     in
     let footer = {html| </div></body></html> |html} in
     let saved_paths  ?(json_of_dirname = false) path =
-      let thing =
-        Save_result.construct_relative_path ~work_dir:Config.work_dir path in
+      let thing = relative_to_results path in
       let json =
-        thing
-        |> (if json_of_dirname then Filename.dirname else fun x -> x)
-        |> Save_result.json_dump_path in
-      (thing, json) in
+        String.take_while thing ~f:((<>) '/') ^ ".json" in
+      (thing, json)
+    in
     let list_item ?(with_json = false) ?(with_gzip = false) title path =
       let html, j = saved_paths path in
       let gzip_link =
@@ -430,7 +438,7 @@ module To_workflow
         else None in
       let json_link =
         if with_json
-        then Some (relative_link ~href:j "JSON-pipeline")
+        then Some (relative_link ~href:j "JSON-Provenance")
         else None in
       sprintf "<li>%s%s</li>"
         (relative_link ~href:html title)
@@ -446,8 +454,7 @@ module To_workflow
           "Normal-bam", Some ((get_bam normal_bam)#product#path);
           "Tumor-bam", Some ((get_bam tumor_bam)#product#path);
           "RNA-bam",
-          Option.map rna_bam ~f:(fun b ->
-              (get_bam b)#product#path);
+          Option.map rna_bam ~f:(fun b -> (get_bam b)#product#path);
         ]
         @ List.map vcfs ~f:(fun (name, repr) ->
             let wf = get_vcf repr in
@@ -455,9 +462,9 @@ module To_workflow
             title, Some wf#product#path)
         @ (Option.value_map ~default:[] kallisto ~f:(fun ks ->
             (List.map ks ~f:(fun (name, k) ->
-              let wf = get_kallisto_result k in
-              let title = sprintf "Kallisto: %s" name in
-              title, Some wf#product#path))))
+                 let wf = get_kallisto_result k in
+                 let title = sprintf "Kallisto: %s" name in
+                 title, Some wf#product#path))))
         @ [
           "OptiType-Normal",
           Option.map optitype_normal ~f:(fun i ->
@@ -535,10 +542,7 @@ module To_workflow
         ]
       in
       let cat_flatstat f =
-        sprintf "cat %s"
-          (Config.saving_path
-           // Save_result.construct_relative_path ~work_dir:Config.work_dir
-             (get_flagstat_result f)#product#path) in
+        sprintf "cat %s" (get_flagstat_result f)#product#path in
       [
         `String (
           sprintf {html|<h2>Dataset QC</h2><ul>
@@ -546,23 +550,25 @@ module To_workflow
                   |html}
             (String.concat ~sep:"\n" items));
       ]
-      @ inline_code "Normal Bam Flagstat"
-        (cat_flatstat normal_bam_flagstat)
-      @ inline_code "Tumor Bam Flagstat"
-        (cat_flatstat tumor_bam_flagstat)
+      @ inline_code "Normal Bam Flagstat" (cat_flatstat normal_bam_flagstat)
+      @ inline_code "Tumor Bam Flagstat" (cat_flatstat tumor_bam_flagstat)
       @ Option.value_map rna_bam_flagstat ~default:[]
         ~f:(fun f -> inline_code "RNA Bam Flagstat" (cat_flatstat f))
       @ [
         `String (sprintf
-                   "<li>Experimental: local %s.</li>"
+                   "<li>Experimental: %s (made with %s).</li>"
                    (relative_link
                       ~href:(Filename.basename igv_dot_xml#product#path)
-                      "<code>IGV.xml</code>"));
+                      "<code>IGV.xml</code>")
+                   (Option.value_map igv_url_server_prefix
+                      ~default:"relative paths"
+                      ~f:(sprintf "URI <code>%s</code>"))
+                );
         `String {|</ul>|}
       ]
     in
     let output str = append_to str ~file:product#path in
-    let dot_file = Config.saving_path // "pipeline.dot" in
+    let dot_file = saving_base_path // "pipeline.dot" in
     let make =
       Biokepi.Machine.quick_run_program
         Config.machine
@@ -577,12 +583,11 @@ module To_workflow
               (List.map metadata ~f:(fun (k, v) ->
                    sprintf "<li>%s: <code>%s</code></li>" k v)
                |> String.concat ~sep:"\n");
-            ksprintf output "<p>Results path: <code>%s</code></p>\n" Config.saving_path;
+            ksprintf output
+              "<p>Results path: <code>%s</code></p>\n" saving_base_path;
             append_dirty_to qc_section ~file:product#path;
             output other_results_section;
-            shf "echo %s > %s"
-              (Filename.quote (Mem.get_dot_content ()))
-              dot_file;
+            shf "echo %s > %s" (Filename.quote Config.dot_content) dot_file;
             output "<hr/><h2>Pipeline Graph</h2>";
             graphivz_rendered_links ~html_file:product#path dot_file;
             output "<div id=\"svg-status\">SVG rendering in progress …</div>";
@@ -634,6 +639,6 @@ xhttp.send();
           ~make
           ~edges
       )
-    )
+    ) |> with_provenance "final-report" []
 
 end

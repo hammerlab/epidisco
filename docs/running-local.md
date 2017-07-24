@@ -22,7 +22,7 @@ Get Secotrec-local
 the infrastructure needed to run Epidisco. We need to download the application:
 
     mkdir ~/bin/
-    wget -O ~/bin/secotrec-local https://storage.googleapis.com/smondet-experiments/secotrec-local-Linux-x86_64
+    wget -O ~/bin/secotrec-local https://www.dropbox.com/s/dji0uhj0m6v91hg/secotrec-local-Linux-x86_64?raw=1
     chmod +x ~/bin/secotrec-local
     export PATH=~/bin:$PATH
 

@@ -210,22 +210,22 @@ module EDSL = struct
   module To_workflow
       (Config : sig
          include Biokepi.EDSL.Compile.To_workflow.Compiler_configuration
-         val saving_path : string
          val run_name : string
        end) = struct
 
     open Extended_file_spec
     open Config
+    open Biokepi.EDSL.Compile.To_workflow.Annotated_file
 
-    let flagstat_email ~normal ~tumor ?rna email_options =
+    let flagstat_email ~normal ~tumor ?rna email_options : t =
       let email =
         let get_flg =
           Biokepi.EDSL.Compile.To_workflow.File_type_specification.
             get_flagstat_result in
         let nf, tf, rf =
-          get_flg normal,
-          get_flg tumor,
-          Option.map ~f:get_flg rna in
+          get_flg (get_file normal),
+          get_flg (get_file tumor),
+          Option.map ~f:(fun r -> r |> get_file |> get_flg) rna in
         let flagstats =
           [("normal", nf); ("tumor", tf)]
           @ Option.value_map rf ~default:[] ~f:(fun r -> ["RNA", r]) in
@@ -240,14 +240,11 @@ module EDSL = struct
           ~mailgun_api_key:email_options.mailgun_api_key
           ~mailgun_domain_name:email_options.mailgun_domain_name
           wrapper in
-      Email email
+      Email email |> with_provenance "flagstat-email" []
 
     let fastqc_email ~fastqcs email_options =
       let wrapper =
-        let get_fqc =
-          Biokepi.EDSL.Compile.To_workflow.File_type_specification.
-            get_fastqc_result
-        in
+        let get_fqc f = get_file f |> get_fastqc_result in
         let fastqcs =
           List.map fastqcs ~f:(fun (n, f) -> n, get_fqc f) in
         let summary_file =
@@ -264,7 +261,7 @@ module EDSL = struct
           ~mailgun_domain_name:email_options.mailgun_domain_name
           wrapper
       in
-      Email email
+      Email email |> with_provenance "fastqc-email" []
   end
 
   module To_dot = struct

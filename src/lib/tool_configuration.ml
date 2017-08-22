@@ -62,6 +62,7 @@ let vaxrank_config include_mismatches_after_variant =
    xlsx_report = true;
    pdf_report = true;
    ascii_report = true;
+   debug_log = "vaxrank-debug.log";
    parameters = []}
 
 let strelka_config = Biokepi.Tools.Strelka.Configuration.exome_default

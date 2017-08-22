@@ -30,18 +30,18 @@ module Report_utils (V: sig val vc: int end) = struct
 
   (* Helps when the tool is optional and passes a single result
      down to the report *)
-  let opt n = 
+  let opt n =
     Option.value_map ~default:[] ~f:(fun o -> [n, o ~var_count])
 
-  (* Helps when tools provide named result tuples where the names 
+  (* Helps when tools provide named result tuples where the names
      are passed down to report as well. Allows modifying the name
      when needed via the `namefun` parameter *)
-  let named_map ?(namefun=(fun n -> n)) = 
-    List.map ~f:(fun (n, v) -> namefun n, v ~var_count) 
+  let named_map ?(namefun=(fun n -> n)) =
+    List.map ~f:(fun (n, v) -> namefun n, v ~var_count)
 
   (* Helps when the tool is optional but produced multiple named
      results to be included in the report *)
-  let opt_named_map = 
+  let opt_named_map =
     Option.value_map ~default:[] ~f:named_map
 end
 
@@ -382,7 +382,7 @@ module To_workflow
         let opt o f =
           Option.value_map o ~default:[] ~f:(fun v -> [ f v |> depends_on ])
         in
-        let named_map get_func = 
+        let named_map get_func =
           List.map ~f:(fun (_, v) -> get_func v |> depends_on)
         in
         let mopt o f =
@@ -487,6 +487,10 @@ module To_workflow
           Option.(
             vaxrank >>= fun v ->
             (get_vaxrank_result v)#product#xlsx_report_path);
+          "Vaxrank Log (Debug)",
+          Option.(
+            vaxrank >>= fun v ->
+            (Some (get_vaxrank_result v)#product#debug_log_path));
           "Topiary",
           Option.map topiary ~f:(fun i ->
               (get_topiary_result i)#product#path);

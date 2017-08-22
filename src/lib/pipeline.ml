@@ -193,7 +193,6 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
     Bfx.optitype ftype (Bfx.concat fqs)
     |> save_through ~name:("OptiType-" ^ name)
 
-
   let run_kallisto ~reference_build ~rna_samples () =
     List.map
       ~f:(fun (n, fq) ->
@@ -334,11 +333,11 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
       |> (fun (n, t) -> save_through ~name:"normal-bam" n, save_through ~name:"tumor-bam" t)
     in
     let bedfile = parameters.bedfile in
-    let vcfs =
+    let raw_vcfs =
       vcf_pipeline ~parameters ?bedfile
         ~normal:normal_bam.content ~tumor:tumor_bam.content in
     let somatic_vcfs =
-      List.filter ~f:(fun (_, somatic, _) -> somatic) vcfs
+      List.filter ~f:(fun (_, somatic, _) -> somatic) raw_vcfs
       |> List.map ~f:(fun (_, _, v) -> v) in
     let rna_results =
       let {reference_build; with_seq2hla; with_optitype_rna; _} = parameters in
@@ -348,13 +347,20 @@ module Full (Bfx: Extended_edsl.Semantics) = struct
         Some (rna_pipeline rna_samples ~reference_build ~parameters)
     in
     let vcfs =
-      match parameters.reference_build with
-      | "b37" | "hg19" ->
-        List.map vcfs ~f:(fun (k, somatic, vcf) ->
-            Bfx.vcf_annotate_polyphen vcf
-            |> fun a -> (k, save_through ("VCF-annotated-" ^ k) a))
-      | _ -> List.map vcfs ~f:(fun (name, somatic, v) ->
-          name, (save_through (sprintf "vcf-%s" name) v))
+      let vcf_func (name, somatic, vcf) =
+        let save_with_name v = (name, save_through ("VCF-postpro-" ^ name) v) in
+        match parameters.reference_build with
+        | "b37" | "b37decoy" | "hg19" -> 
+          begin
+           Bfx.vcf_annotate_polyphen vcf
+           |> Bfx.snpeff
+           |> save_with_name
+          end
+        | "b38" | "hg38" | "hg18" | "mm10" ->
+          begin Bfx.snpeff vcf |> save_with_name end
+        | _ -> (save_with_name vcf)
+      in
+      List.map raw_vcfs ~f:vcf_func
     in
     let {optitype_normal; optitype_tumor; optitype_rna; mhc_alleles; seq2hla} =
       hla_pipeline ~parameters ~normal_fastqs ~tumor_fastqs ?rna_fastqs

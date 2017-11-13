@@ -148,6 +148,8 @@ let conv ~kind =
   ((fun s ->
       try Result.Ok (of_strings ~kind ~realign_bams ~reference_build
                        (String.split ~on:(`Character ',') s))
-      with _ -> Result.Error (`Msg (sprintf "Error parsing Input.t for %s" kind))),
+      with err ->
+        Result.Error (`Msg (sprintf "Error parsing Input.t for %s: %s" kind
+                              (Printexc.to_string err)))),
    (fun fmt t -> Format.fprintf fmt "%s"
        (String.concat (List.map t ~f:to_string))))
